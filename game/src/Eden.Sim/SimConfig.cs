@@ -84,6 +84,60 @@ public sealed record SimConfig
     /// <summary>How far (m) an NPC looks for food, game and mates when deciding.</summary>
     public float SearchRadius { get; init; } = 96f;
 
+    // ---- M3 society tunables ----------------------------------------------------------------
+
+    /// <summary>DBSCAN eps (m) for clustering household homes into settlements.</summary>
+    public float SettlementRadius { get; init; } = 40f;
+
+    /// <summary>People a cluster of 2+ households needs before it counts as a settlement.</summary>
+    public int SettlementMinMembers { get; init; } = 4;
+
+    /// <summary>A settlement's land reaches this multiple of <see cref="SettlementRadius"/> from its centre.</summary>
+    public float TerritoryFactor { get; init; } = 1.6f;
+
+    /// <summary>Weight of the parents' traits in a grown child's traits (the rest is genes).</summary>
+    public float UpbringingWeight { get; init; } = 0.3f;
+
+    public int MigrationMinMembers { get; init; } = 22;
+    public float MigrationChancePerDay { get; init; } = 0.04f;
+
+    /// <summary>A colony site is this far (up to twice this) from the mother settlement.</summary>
+    public float MigrationMinDistance { get; init; } = 90f;
+
+    public int PeoplePerFarmPlot { get; init; } = 6;
+    public int MaxFarmPlotsPerSettlement { get; init; } = 10;
+
+    /// <summary>Crop growth per day at fertility 0.4 in spring/summer; 1 = ripe.</summary>
+    public float CropGrowthPerDay { get; init; } = 0.4f;
+
+    /// <summary>Food per harvest on average soil.</summary>
+    public float FarmYield { get; init; } = 20f;
+
+    /// <summary>Food a settlement can keep without a storehouse.</summary>
+    public float BasePileCapacity { get; init; } = 20f;
+    public float StoredFoodSpoilage { get; init; } = 0.02f;
+    public float PiledFoodSpoilage { get; init; } = 0.1f;
+
+    public int TradeCooldownDays { get; init; } = 10;
+    public float TradeMinSurplus { get; init; } = 15f;
+    public float TradeSurplusPerCapita { get; init; } = 1.5f;
+    public float TradeDeficitPerCapita { get; init; } = 1f;
+    public float TradeLoad { get; init; } = 12f;
+    public float TradeRange { get; init; } = 320f;
+
+    /// <summary>Raid when grievance + aggression × weight + food pressure − leader friendship reaches this.</summary>
+    public float RaidThreshold { get; init; } = 1.3f;
+    public float RaidAggressionWeight { get; init; } = 0.6f;
+    public int RaidCooldownDays { get; init; } = 30;
+    public float RaidRange { get; init; } = 320f;
+    public float GrievanceDecayPerDay { get; init; } = 0.97f;
+
+    /// <summary>Grievance a settlement gains per outsider adult on its land per day.</summary>
+    public float TrespassGrievance { get; init; } = 0.02f;
+
+    /// <summary>Leaders' mutual affinity at which two factions ally into one.</summary>
+    public float AllianceAffinity { get; init; } = 0.6f;
+
     public int TicksPerDay => TicksPerHour * HoursPerDay;
     public int TicksPerYear => TicksPerDay * DaysPerYear;
 }

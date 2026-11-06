@@ -202,6 +202,7 @@ public sealed partial class World
             Terrain.Heights[cell] += delta * falloff * falloff * (3f - 2f * falloff);
         }
         Terrain.RecomputeDerived();
+        OnTerrainChanged();
         _publishedHeights = null;
         _publishedBiomes = null;
         // Anyone now standing in deep water swims to the nearest walkable spot.
@@ -365,6 +366,7 @@ public sealed partial class World
             case ActionKind.Hunt or ActionKind.Court or ActionKind.Give or ActionKind.Pray:
                 return adult;
         }
+        if (IsSocietyActionUnlocked(slot, action, adult)) return true;
         if (slot >= _knowledge.Length || _knowledge[slot] is not { } known) return false;
         foreach (var (id, p) in known)
         {

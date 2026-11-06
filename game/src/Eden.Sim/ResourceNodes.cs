@@ -33,6 +33,12 @@ public sealed class ResourceNodes
     public float[] Max = new float[256];
     public float[] RegenPerDay = new float[256];
 
+    /// <summary>
+    /// Walkable-region label per terrain cell, set by the world's <see cref="Pathfinder"/> (M3). When set,
+    /// "reachable" means "on the same landmass" (A* finds the way around coasts) instead of a straight line.
+    /// </summary>
+    public int[]? Region;
+
     public ResourceNodes(Terrain terrain)
     {
         _terrain = terrain;
@@ -100,7 +106,9 @@ public sealed class ResourceNodes
                 float d2 = dx * dx + dz * dz;
                 if (d2 > best || (d2 == best && i > bestIdx)) continue;
                 // Movement is straight-line: a node across water is not an option.
-                if (reachable && !_terrain.LineWalkable(x, z, X[i], Z[i])) continue;
+                if (reachable && (Region is { } region
+                        ? region[_terrain.CellIndex(X[i], Z[i])] != region[_terrain.CellIndex(x, z)]
+                        : !_terrain.LineWalkable(x, z, X[i], Z[i]))) continue;
                 best = d2;
                 bestIdx = i;
             }

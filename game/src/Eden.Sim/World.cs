@@ -57,6 +57,7 @@ public sealed partial class World
         _grid = new SpatialGrid(Terrain.MaxX + Terrain.CellSize, Terrain.MaxZ + Terrain.CellSize, 32f);
         Validator = new IntentionValidator(this);
         Events.Subscribe(RecordEvent);
+        InitSociety();
 
         var (sx, sz) = WorldGen.PickStart(Terrain, Resources, ref Rng);
         var names = new List<string>();
@@ -104,6 +105,7 @@ public sealed partial class World
             Weather = WeatherKind.Clear;
             Chronicle(Tick, "weather", "The skies cleared.", 2, Array.Empty<int>());
         }
+        SocietyDaily();
     }
 
     public LifeStage StageOf(int slot)
@@ -157,7 +159,7 @@ public sealed partial class World
             int id = Npcs.IdOf(s);
             views[k++] = new NpcView(id, x, MathF.Max(Terrain.HeightAt(x, z), Config.SeaLevel - 0.8f), z,
                 Npcs.Heading[s], Npcs.Sex[s], StageOf(s), PoseOf(s),
-                (byte)Math.Clamp((int)(Npcs.Health[s] * 255f), 0, 255), -1, false, id == _possessed);
+                (byte)Math.Clamp((int)(Npcs.Health[s] * 255f), 0, 255), SettlementOfSlot(s), false, id == _possessed);
         }
 
         while (_detailRequests.TryDequeue(out int req))
@@ -177,7 +179,7 @@ public sealed partial class World
             Tick, clock.Year, clock.DayOfYear, clock.HourOfDay,
             new WorldInfo(Config.Seed, Config.WorldWidth, Config.WorldHeight, Config.CellSize, Config.SeaLevel, Config.ChunkSize),
             _publishedHeights ??= (float[])Terrain.Heights.Clone(), _publishedBiomes ??= (byte[])Terrain.Biomes.Clone(),
-            views, Array.Empty<BuildingView>(), chronicle, details, versions, _detailRequests);
+            views, BuildingViews(), chronicle, details, versions, _detailRequests);
     }
 
     private NpcPose PoseOf(int s) => Npcs.Phase[s] switch
@@ -200,9 +202,9 @@ public sealed partial class World
         if (!Npcs.TryGetSlot(id, out int s)) return false;
         var needs = new Dictionary<string, float>();
         for (int n = 0; n < Needs.Count; n++) needs[Needs.Names[n]] = Npcs.Needs[s * Needs.Count + n];
-        // M1: traits are the genes; upbringing blending arrives with households (M3).
+        // Traits are the genes blended with upbringing (M3, World.Society.cs).
         var traits = new Dictionary<string, float>();
-        for (int g = 0; g < Genetics.Count; g++) traits[Genetics.Names[g]] = Npcs.Genes[s * Genetics.Count + g];
+        for (int g = 0; g < Genetics.Count; g++) traits[Genetics.Names[g]] = Trait(s, (Gene)g);
         var knowledge = new Dictionary<string, float>();
         if (s < _knowledge.Length && _knowledge[s] is { } kn)
             foreach (var (c, p) in kn) knowledge[c] = p;

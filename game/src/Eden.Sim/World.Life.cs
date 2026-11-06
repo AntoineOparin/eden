@@ -118,6 +118,7 @@ public sealed partial class World
         Npcs.LifespanYears[s] = LifespanFor(s);
         Npcs.Name[s] = Names.Next(ref Rng, sex == Sex.Female);
         Npcs.Food[s] = 2;
+        OnNpcCreated(s, born: false);
         return s;
     }
 
@@ -180,6 +181,7 @@ public sealed partial class World
         MaxLineage = Math.Max(MaxLineage, lineage + 1);
         Npcs.Children[mother]++;
         Npcs.Name[c] = Names.Next(ref Rng, sex == Sex.Female);
+        OnNpcCreated(c, born: true);
         TotalBirths++;
 
         int childId = Npcs.IdOf(c);

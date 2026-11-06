@@ -27,6 +27,7 @@ public sealed partial class World
         h = Hash.Mix(h, (ulong)TotalBirths);
         h = Hash.Mix(h, (ulong)TotalDeaths);
         h = Hash.Mix(h, (ulong)MaxLineage);
+        h = SocietyHash(h);
         return h;
     }
 
@@ -77,6 +78,7 @@ public sealed partial class World
             bw.Write(Weather); bw.Write(WeatherUntil);
             bw.Write(_possessed); bw.Write(_possDirX); bw.Write(_possDirZ); bw.Write(_possSprint);
         });
+        Section(w, "SOCI", WriteSociety);
     }
 
     private static void Section(BinaryWriter w, string tag, Action<BinaryWriter> body)
@@ -133,6 +135,8 @@ public sealed partial class World
             Weather = br.ReadString(); WeatherUntil = br.ReadInt64();
             _possessed = br.ReadInt32(); _possDirX = br.ReadSingle(); _possDirZ = br.ReadSingle(); _possSprint = br.ReadBoolean();
         }
+        if (sections.TryGetValue("SOCI", out var society)) { using var br = new BinaryReader(new MemoryStream(society)); ReadSociety(br); }
+        else ReadSociety(null);
 
         _grid = new SpatialGrid(Terrain.MaxX + Terrain.CellSize, Terrain.MaxZ + Terrain.CellSize, 32f);
         _grid.Rebuild(Npcs);
