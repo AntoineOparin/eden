@@ -12,7 +12,9 @@ M1 / M2 / Worker merge.
 | Animals are resource herds (`ResourceNodes` kind `game`), not agents | M3 or M8 | Plan wanted animals as simple agents; herds were enough for M1 food. Revisit when predators or herding matter. |
 | Traits equal genes | M3 | Blending with upbringing needs households. |
 | Movement is strictly straight-line with a move budget and an avoid-node memory | M3 | NPCs give up on targets behind a coast. Add grid pathing (A* on the cost field) once settlements and trade need it; sim truth stays off NavigationServer3D. |
-| `concepts.json` not loaded; `game/data/` does not exist | M4 | `IntentionValidator` already applies all `concepts.schema.json` rules to inventions. |
+| M4 knowledge is coded against `IBuildingUnlocks` (no-op) and plain record sites | M3 (on merge) | Set `World.BuildingUnlocks` to the `BuildingKinds` registry, attach record sites to archive buildings (`AddRecordSite(x, z, buildingId)`, `DestroyRecordSite` when one burns), and rerun the M4 "second settlement only after contact" test on real settlements (M4 used two spatially separated groups). |
+| Build, farm, trade, raid and settle score 0 until a concept unlocks them | M3 | `SimConfig.KnowledgeGatesActions`, same rule `IntentionValidator` applies. Early unlocks: shelter (build), agriculture (farm), barter (trade), warfare (raid), leadership (settle). |
+| yieldMod on derived goods (grain, fish, clay, hide, cloth, metals) has no producer yet | M3 | Call `EffectApplier.YieldFactor(world, slot, "grain")` etc. when farming/crafting produce them. Crafting a tool uses one unit of its first material node only. |
 | Truncated save body can leave a half-loaded world | M8 (save pass) | Garbage files are rejected; a good header with a cut-off body is not. Load into a scratch world and swap on success. |
 | ~4 KB per tick of allocation from birth/death/gossip events | M8 | 5,000 NPCs tick in 2.5 ms today; events are the remaining allocator. |
 | Population plateaus around 200, food-limited | M3 | Farming, storage and trade are what lift the cap. Keep the M1 population test ratio, do not retune it to hide this. |

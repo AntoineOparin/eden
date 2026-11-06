@@ -1,7 +1,7 @@
 // Validates docs/specs/contracts/*.schema.json (draft 2020-12) and every fixture in
 // docs/specs/contracts/fixtures/. Fixture naming: <schema>.<def>.<ok|bad>[.n].json, or
 // <schema>.<ok|bad>[.n].json for the root schema. Exit code 1 on any failure.
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import Ajv2020 from "ajv/dist/2020.js";
@@ -39,7 +39,40 @@ for (const f of fixtures) {
     if (!ok) console.log(ajv.errorsText(validate.errors, { separator: "\n     " }));
   }
 }
-console.log(`${schemaFiles.length} schemas, ${fixtures.length} fixtures, ${failures} failures`);
+// game/data/concepts.json (M4) against concepts.schema.json, plus the id cross-check the sim loader does.
+const dataDir = join(root, "..", "..", "..", "game", "data");
+const conceptsPath = join(dataDir, "concepts.json");
+let dataFiles = 0;
+if (existsSync(conceptsPath)) {
+  dataFiles++;
+  const validate = ajv.getSchema("https://eden.local/contracts/concepts.schema.json");
+  const concepts = JSON.parse(readFileSync(conceptsPath, "utf8"));
+  const problems = [];
+  if (!validate(concepts)) problems.push(ajv.errorsText(validate.errors, { separator: "\n     " }));
+  const ids = (name) => {
+    const p = join(dataDir, `${name}.json`);
+    return existsSync(p) ? new Set(JSON.parse(readFileSync(p, "utf8")).map((x) => x.id)) : new Set();
+  };
+  const known = { resource: ids("resources"), building: ids("buildings"), tool: ids("tools") };
+  const conceptIds = new Set();
+  for (const c of Array.isArray(concepts) ? concepts : []) {
+    if (conceptIds.has(c.id)) problems.push(`duplicate concept id ${c.id}`);
+    conceptIds.add(c.id);
+  }
+  for (const c of Array.isArray(concepts) ? concepts : []) {
+    for (const p of c.prerequisites ?? []) if (!conceptIds.has(p)) problems.push(`${c.id}: unknown prerequisite ${p}`);
+    for (const e of c.effects ?? [])
+      for (const field of ["resource", "building", "tool"])
+        if (e[field] !== undefined && !known[field].has(e[field])) problems.push(`${c.id}: unknown ${field} ${e[field]}`);
+  }
+  if (problems.length === 0) {
+    console.log(`ok   game/data/concepts.json (${concepts.length} concepts)`);
+  } else {
+    failures++;
+    console.log(`FAIL game/data/concepts.json\n     ${problems.join("\n     ")}`);
+  }
+}
+console.log(`${schemaFiles.length} schemas, ${fixtures.length} fixtures, ${dataFiles} data files, ${failures} failures`);
 process.exit(failures ? 1 : 0);
 
 function fail(msg) {

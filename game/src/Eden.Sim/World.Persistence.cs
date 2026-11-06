@@ -18,6 +18,7 @@ public sealed partial class World
         h = Memories.Hash(h, Npcs);
         h = Relationships.Hash(h);
         h = KnowledgeHash(h);
+        h = KnowledgeExtrasHash(h);
         h = Hash.Mix(h, StableHash.Of(Weather));
         h = Hash.Mix(h, (ulong)WeatherUntil);
         h = Hash.Mix(h, (ulong)_possessed);
@@ -77,6 +78,7 @@ public sealed partial class World
             bw.Write(Weather); bw.Write(WeatherUntil);
             bw.Write(_possessed); bw.Write(_possDirX); bw.Write(_possDirZ); bw.Write(_possSprint);
         });
+        Section(w, "KNW2", WriteKnowledgeExtras);
     }
 
     private static void Section(BinaryWriter w, string tag, Action<BinaryWriter> body)
@@ -91,6 +93,7 @@ public sealed partial class World
 
     internal void ReadBody(BinaryReader r)
     {
+        BeginKnowledgeLoad();
         var sections = new Dictionary<string, byte[]>(StringComparer.Ordinal);
         while (r.BaseStream.Position < r.BaseStream.Length)
         {
@@ -133,6 +136,7 @@ public sealed partial class World
             Weather = br.ReadString(); WeatherUntil = br.ReadInt64();
             _possessed = br.ReadInt32(); _possDirX = br.ReadSingle(); _possDirZ = br.ReadSingle(); _possSprint = br.ReadBoolean();
         }
+        EndKnowledgeLoad(sections.TryGetValue("KNW2", out var knw2) ? knw2 : null);
 
         _grid = new SpatialGrid(Terrain.MaxX + Terrain.CellSize, Terrain.MaxZ + Terrain.CellSize, 32f);
         _grid.Rebuild(Npcs);

@@ -76,7 +76,7 @@ public sealed partial class IntentionValidator(World world) : IIntentionValidato
         return dx * dx + dz * dz > r * r ? "listener out of earshot" : null;
     }
 
-    /// <summary>The concepts.schema.json rules, re-checked in C#, plus "prerequisites mastered" (≥ 0.6).</summary>
+    /// <summary>The concepts.schema.json rules, re-checked in C#, plus the invention rules of 50-knowledge-data.md (prerequisites ≥ 0.8, ≤ 3 effects, factor ≤ 1.5, belief ≤ 140 chars, known ids).</summary>
     private string? RejectInvention(int slot, ConceptProposal? c)
     {
         if (c is null) return "missing concept";
@@ -92,7 +92,7 @@ public sealed partial class IntentionValidator(World world) : IIntentionValidato
             if (p is null || !Identifier().IsMatch(p)) return "prerequisite is not an identifier";
             for (int j = 0; j < i; j++) if (c.Prerequisites[j] == p) return "duplicate prerequisite";
             if (!world.Concepts.ContainsKey(p)) return $"unknown prerequisite {p}";
-            if (world.Proficiency(slot, p) < 0.6f) return $"prerequisite {p} not mastered";
+            if (world.Proficiency(slot, p) < world.Config.InventionMastery) return $"prerequisite {p} not mastered";
         }
         if (c.Effects is null || c.Effects.Count is < 1 or > 6) return "effects must number 1..6";
         foreach (var e in c.Effects)
@@ -114,7 +114,7 @@ public sealed partial class IntentionValidator(World world) : IIntentionValidato
             };
             if (bad is not null) return bad;
         }
-        return null;
+        return world.RejectInventionRules(slot, c);
     }
 
     private static bool IsId(string? s) => s is not null && Identifier().IsMatch(s);

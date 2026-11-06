@@ -84,6 +84,65 @@ public sealed record SimConfig
     /// <summary>How far (m) an NPC looks for food, game and mates when deciding.</summary>
     public float SearchRadius { get; init; } = 96f;
 
+    // ---- M4 knowledge tunables (docs/specs/50-knowledge-data.md) -----------------------------
+
+    /// <summary>Proficiency the first NPCs (and god-spawned strangers) have in the starter concepts.</summary>
+    public float StarterProficiency { get; init; } = 0.5f;
+
+    /// <summary>A concept's effects (unlocks, beliefs) apply at this proficiency. yieldMod scales from 0.</summary>
+    public float UnlockProficiency { get; init; } = 0.3f;
+
+    /// <summary>All prerequisites must be at least this for a discovery roll to consider a concept.</summary>
+    public float DiscoveryThreshold { get; init; } = 0.6f;
+
+    /// <summary>Per-tick discovery chance per eligible concept ≈ curiosity × (1 − difficulty) × this. 0 disables discovery.</summary>
+    public float DiscoveryRate { get; init; } = 1e-4f;
+
+    /// <summary>Discovery is rolled every this many ticks per NPC (staggered), with the chance scaled to match.</summary>
+    public int DiscoveryIntervalTicks { get; init; } = 60;
+
+    /// <summary>Proficiency a discoverer starts with (and an LLM inventor).</summary>
+    public float DiscoveredProficiency { get; init; } = 0.3f;
+
+    /// <summary>Inventions need every prerequisite at this proficiency or above.</summary>
+    public float InventionMastery { get; init; } = 0.8f;
+
+    /// <summary>The Invent action multiplies one discovery roll by this.</summary>
+    public float InventBoost { get; init; } = 30f;
+
+    /// <summary>Honing per practice: Δp = rate × (1 − p)².</summary>
+    public float HoneRate { get; init; } = 0.01f;
+
+    /// <summary>Proximity chatter (Talk): the listener moves this fraction of the gap toward the speaker.</summary>
+    public float ChatterRate { get; init; } = 0.04f;
+
+    /// <summary>Deliberate teaching: fraction of the gap closed per lesson, times (0.5 + pupil curiosity).</summary>
+    public float TeachRate { get; init; } = 0.25f;
+
+    /// <summary>Teaching and learning between non-kin need at least this much trust.</summary>
+    public float TeachTrustMin { get; init; } = 0.05f;
+
+    /// <summary>A teacher needs this proficiency in the concept they teach.</summary>
+    public float TeachMinProficiency { get; init; } = 0.5f;
+
+    /// <summary>Apprenticeship: a child near a parent closes this fraction of the gap per day, per concept.</summary>
+    public float ApprenticeRatePerDay { get; init; } = 0.04f;
+
+    /// <summary>Writers need this proficiency in "writing" to write records; readers need <see cref="UnlockProficiency"/>.</summary>
+    public float WritingProficiency { get; init; } = 0.5f;
+
+    /// <summary>How close (m) a reader or writer must stand to a record.</summary>
+    public float RecordRadius { get; init; } = 16f;
+
+    /// <summary>Reading: fraction of the gap to the written level closed per day, per concept.</summary>
+    public float ReadRatePerDay { get; init; } = 0.15f;
+
+    /// <summary>Chance per day that each tool an NPC carries breaks.</summary>
+    public float ToolBreakChancePerDay { get; init; } = 0.03f;
+
+    /// <summary>Knowledge-gated actions (build, farm, craft, teach, learn, trade, raid, settle, invent) score 0 until unlocked.</summary>
+    public bool KnowledgeGatesActions { get; init; } = true;
+
     public int TicksPerDay => TicksPerHour * HoursPerDay;
     public int TicksPerYear => TicksPerDay * DaysPerYear;
 }

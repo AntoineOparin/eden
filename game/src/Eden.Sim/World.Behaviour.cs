@@ -69,6 +69,7 @@ public sealed partial class World
 
         Span<float> scores = stackalloc float[ActionScorer.ActionCount];
         ActionScorer.ScoreAll(in c, scores);
+        ScoreKnowledge(s, stage, scores);
         var best = ActionScorer.Best(scores);
 
         var current = n.Action[s];
@@ -151,6 +152,9 @@ public sealed partial class World
             }
             case ActionKind.Pray:
                 Act(s, 12);
+                break;
+            case ActionKind.Teach or ActionKind.Learn or ActionKind.Craft or ActionKind.Invent:
+                BeginKnowledgeAction(s, action);
                 break;
             default:
                 // Idle: children drift back to whoever looks after them.
@@ -299,6 +303,7 @@ public sealed partial class World
     {
         var n = Npcs;
         var cfg = Config;
+        CompleteKnowledge(s, n.Action[s]);
         switch (n.Action[s])
         {
             case ActionKind.Eat:
@@ -316,7 +321,7 @@ public sealed partial class World
             {
                 int node = n.TargetNode[s];
                 if (node < 0 || Resources.Amount[node] < 1f) break;
-                float take = MathF.Floor(Math.Min(Resources.Amount[node], 3f + 2f * n.GatherSkill[s]));
+                float take = MathF.Floor(Math.Min(Resources.Amount[node], (3f + 2f * n.GatherSkill[s]) * YieldFactor(s, Resources.Kind[node])));
                 take = Math.Min(take, cfg.MaxCarriedFood - n.Food[s]);
                 if (stage == LifeStage.Child) take = Math.Min(take, 2f);
                 if (take <= 0) break;
@@ -337,7 +342,7 @@ public sealed partial class World
                     n.Health[s] = Math.Max(0f, n.Health[s] - 0.3f);
                 if (!Rng.Chance(chance)) break;
                 Resources.Amount[node] -= 1f;
-                n.Food[s] = Math.Min(cfg.MaxCarriedFood, n.Food[s] + 5f);
+                n.Food[s] = Math.Min(cfg.MaxCarriedFood, n.Food[s] + 5f * YieldFactor(s, ResourceKind.Game));
                 break;
             }
             case ActionKind.Court:
@@ -398,6 +403,7 @@ public sealed partial class World
         n.NeedRef(o, Need.Social) = Math.Min(1f, n.Need(o, Need.Social) + 0.25f);
         Relationships.Adjust(n.IdOf(s), n.IdOf(o), 0.04f, 0.03f);
         Gossip(s, o);
+        ShareKnowledge(s, o);
     }
 
     private void Gossip(int speaker, int listener)

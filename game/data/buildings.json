@@ -1,0 +1,12 @@
+[
+  { "id": "hut", "name": "Hut", "description": "A home of branches, hides or mud." },
+  { "id": "storehouse", "name": "Storehouse", "description": "Shared stock for a settlement." },
+  { "id": "farm-plot", "name": "Farm plot", "description": "A tilled field for grain." },
+  { "id": "well", "name": "Well", "description": "Water without walking to the shore." },
+  { "id": "kiln", "name": "Kiln", "description": "A clay oven for pottery and smelting." },
+  { "id": "workshop", "name": "Workshop", "description": "Benches and tools for crafting." },
+  { "id": "shrine", "name": "Shrine", "description": "A holy place for prayer." },
+  { "id": "archive", "name": "Archive", "description": "Holds written records so knowledge outlives its holders." },
+  { "id": "wall", "name": "Wall", "description": "Stone or timber defences." },
+  { "id": "dock", "name": "Dock", "description": "A landing for boats and fishing." }
+]
