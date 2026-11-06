@@ -12,9 +12,8 @@ public sealed class SimHost : ISimHost, IIntentionSink
 {
     private readonly World _world;
     private readonly ConcurrentQueue<WorldCommand> _commands = new();
-    private readonly ConcurrentQueue<Intention> _intentions = new();
-    private readonly int _maxIntentionQueue;
-    private volatile IWorldSnapshot _latest;
+    private readonly IntentionQueue _intentions;
+    private volatile WorldSnapshot _latest;
     private Thread? _thread;
     private volatile bool _running;
     private volatile int _timeScale = (int)TimeScale.X1;
@@ -22,12 +21,12 @@ public sealed class SimHost : ISimHost, IIntentionSink
     public SimHost(SimConfig config, int maxIntentionQueue = 4096)
     {
         _world = new World(config);
-        _maxIntentionQueue = maxIntentionQueue;
         _latest = _world.Snapshot();
+        _intentions = new IntentionQueue(maxIntentionQueue, () => _latest);
     }
 
     public IWorldSnapshot Latest => _latest;
-    public IIntentionSink Intentions => this;
+    public IIntentionSink Intentions => _intentions;
     public TimeScale Scale => (TimeScale)_timeScale;
 
     /// <summary>Rejected intentions and unhandled commands, for the debug overlay. Bounded.</summary>
@@ -35,12 +34,7 @@ public sealed class SimHost : ISimHost, IIntentionSink
 
     public void Enqueue(WorldCommand command) => _commands.Enqueue(command);
 
-    public bool TryPush(Intention intention)
-    {
-        if (_intentions.Count >= _maxIntentionQueue) return false;
-        _intentions.Enqueue(intention);
-        return true;
-    }
+    public bool TryPush(Intention intention) => _intentions.TryPush(intention);
 
     public void Start()
     {
@@ -97,6 +91,8 @@ public sealed class SimHost : ISimHost, IIntentionSink
             if (cmd is SetTimeScaleCommand ts) _timeScale = (int)ts.Scale;
             else _world.Apply(cmd);
         }
+        while (_world.TryDequeueLog(out var line))
+            if (Diagnostics.Count < 256) Diagnostics.Enqueue(line);
         while (_intentions.TryDequeue(out var intent))
         {
             var reason = _world.Apply(intent);

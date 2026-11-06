@@ -18,6 +18,16 @@ public struct Rng
         _s3 = SplitMix(ref x);
     }
 
+    /// <summary>Raw generator state, for save files only.</summary>
+    public readonly (ulong, ulong, ulong, ulong) State => (_s0, _s1, _s2, _s3);
+
+    public static Rng FromState((ulong s0, ulong s1, ulong s2, ulong s3) state)
+    {
+        var r = default(Rng);
+        (r._s0, r._s1, r._s2, r._s3) = state;
+        return r;
+    }
+
     private static ulong SplitMix(ref ulong x)
     {
         ulong z = x += 0x9E3779B97F4A7C15UL;
