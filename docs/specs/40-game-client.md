@@ -80,6 +80,10 @@ reference need a matching symlink here.
 - Manual M2: `FakeSimHost` with 1,000 NPCs at 60 fps on the laptop, screenshot via the godot
   MCP attached to the PR.
 
+## Carried-over items
+
+See `90-backlog.md`; the rows naming your milestone are part of your scope.
+
 ## Do not touch
 
 - `game/src/Eden.Sim/**`, `game/src/Eden.Mind/**`, `brain/**`.

@@ -123,6 +123,10 @@ a concept with no written record removes it from the world (`ConceptGraph.KnownA
 Everything in this project runs in under 1 s for the whole suite except the population tests,
 which are tagged `[Trait("Category", "Slow")]` and must stay under 20 s.
 
+## Carried-over items
+
+See `90-backlog.md`; the rows naming your milestone are part of your scope.
+
 ## Do not touch
 
 - `game/src/Eden.Game/**`, `game/src/Eden.Mind/**`, `game/scenes/**`, `brain/**`.

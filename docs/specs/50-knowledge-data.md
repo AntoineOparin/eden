@@ -69,6 +69,10 @@ are appended to the save, not to `concepts.json`.
 - `ConceptGraphTests`: no cycles, all referenced ids exist, every concept reachable from the
   starter set.
 
+## Carried-over items
+
+See `90-backlog.md`; the rows naming your milestone are part of your scope.
+
 ## Do not touch
 
 - The schema or `ConceptEffectKind` without the one-PR rule above.

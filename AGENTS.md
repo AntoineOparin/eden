@@ -6,7 +6,8 @@ exactly; when the codebase and this file disagree, ask before "fixing" either.
 Eden is a WorldBox-style god sim with agentic NPCs. The master plan is
 `docs/specs/00-architecture.md`. Every module has its own spec in `docs/specs/`; an agent's
 brief is "execute `docs/specs/<file>`, milestone Mx". Read the spec, the contracts it points at,
-and this file before writing code.
+`docs/specs/90-backlog.md` (work earlier milestones carried over to yours), and this file before
+writing code. When you resolve a backlog item, delete its row in the same PR.
 
 ## Stack
 

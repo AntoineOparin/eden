@@ -99,6 +99,10 @@ CPU per request under 10 ms: no heavy string work, no synchronous crypto beyond 
   the fixtures return 200 against real Workers AI.
 - M5: deployed with `wrangler deploy` (asked first), game talks to it end to end.
 
+## Carried-over items
+
+See `90-backlog.md`; the rows naming your milestone are part of your scope.
+
 ## Do not touch
 
 - Anything under `game/`. The C# `WorkerProxyProvider` belongs to `20-mind.md`; if the wire

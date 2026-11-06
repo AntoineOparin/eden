@@ -72,6 +72,10 @@ Manual (M5): strike a village, talk to its leader, they reference the lightning 
 switch to a pasted Anthropic key and the same conversation works; budget meter halts
 background thoughts at the cap.
 
+## Carried-over items
+
+See `90-backlog.md`; the rows naming your milestone are part of your scope.
+
 ## Do not touch
 
 - `game/src/Eden.Sim/**` except by adding an intention type or command in `contracts/` with a note.
