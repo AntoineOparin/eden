@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Headless console runner for Eden.Sim (M1 acceptance check). See docs/specs/10-sim-core.md -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Eden.Sim.Runner</RootNamespace>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Eden.Sim/Eden.Sim.csproj" />
+  </ItemGroup>
+</Project>
