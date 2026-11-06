@@ -37,12 +37,14 @@ if (sweep is { } range) return Sweep(range.from, range.to, years);
 
 var world = new World(new SimConfig { Seed = seed });
 Console.WriteLine($"Eden seed {seed}, {years} years ({world.Config.TicksPerYear} ticks/year)");
-Console.WriteLine(" year  pop  births deaths  gen");
+Console.WriteLine(" year  pop  births deaths  gen  settl  trades  raids  food-stock");
 var sw = Stopwatch.StartNew();
 for (int y = 1; y <= years; y++)
 {
     for (int t = 0; t < world.Config.TicksPerYear; t++) world.Step();
-    Console.WriteLine($" {y,4} {world.Population,4} {world.TotalBirths,7} {world.TotalDeaths,6} {world.MaxLineage,4}");
+    float stock = 0;
+    for (int k = 0; k < world.Settlements.Count; k++) if (world.Settlements.Alive[k]) stock += world.Settlements.Food[k];
+    Console.WriteLine($" {y,4} {world.Population,4} {world.TotalBirths,7} {world.TotalDeaths,6} {world.MaxLineage,4}  {world.SettlementCount,5}  {world.TotalTrades,6}  {world.TotalRaids,5}  {stock,10:F0}");
     if (world.Population == 0) { Console.WriteLine($" extinct in year {y}"); break; }
 }
 Console.WriteLine($"\nsimulated in {sw.Elapsed.TotalSeconds:F1} s, state hash {world.StateHash():X16}");
@@ -53,24 +55,31 @@ return 0;
 
 static int Sweep(int from, int to, int years)
 {
-    Console.WriteLine("seed  final  peak  reached50  gen@50  maxGen  outcome");
+    Console.WriteLine("seed  final  peak  reached50  gen@50  maxGen  settl  founded  trades  raids  leaders  2settl@  trade@  raid@  outcome");
     var results = new string[to - from + 1];
     Parallel.For(from, to + 1, s =>
     {
         var w = new World(new SimConfig { Seed = s });
-        int peak = 0, reachedYear = -1, genAt50 = -1, extinctYear = -1;
+        int peak = 0, reachedYear = -1, genAt50 = -1, extinctYear = -1, twoAt = -1, tradeAt = -1, raidAt = -1;
         for (int y = 1; y <= years; y++)
         {
             for (int t = 0; t < w.Config.TicksPerYear; t++) w.Step();
             peak = Math.Max(peak, w.Population);
+            if (twoAt < 0 && w.SettlementCount >= 2) twoAt = y;
+            if (tradeAt < 0 && w.TotalTrades > 0) tradeAt = y;
+            if (raidAt < 0 && w.TotalRaids > 0) raidAt = y;
             if (reachedYear < 0 && w.Population >= 50) { reachedYear = y; genAt50 = w.MaxLineage; }
             if (w.Population == 0) { extinctYear = y; break; }
         }
         string outcome = extinctYear > 0 ? $"died out in year {extinctYear}" : reachedYear > 0 ? "grew" : "alive, under 50";
-        results[s - from] = $"{s,4}  {w.Population,5}  {peak,4}  {(reachedYear > 0 ? "year " + reachedYear : "-"),9}  {(genAt50 >= 0 ? genAt50.ToString() : "-"),6}  {w.MaxLineage,6}  {outcome}";
+        results[s - from] = $"{s,4}  {w.Population,5}  {peak,4}  {(reachedYear > 0 ? "year " + reachedYear : "-"),9}  {(genAt50 >= 0 ? genAt50.ToString() : "-"),6}  {w.MaxLineage,6}"
+            + $"  {w.SettlementCount,5}  {w.TotalSettlementsFounded,7}  {w.TotalTrades,6}  {w.TotalRaids,5}  {w.LeadersChosen,7}"
+            + $"  {Yr(twoAt),7}  {Yr(tradeAt),6}  {Yr(raidAt),5}  {outcome}";
     });
     foreach (var line in results) Console.WriteLine(line);
     return 0;
+
+    static string Yr(int y) => y < 0 ? "-" : y.ToString();
 }
 
 static int Bench(int n)

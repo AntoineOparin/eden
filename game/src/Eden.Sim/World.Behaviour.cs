@@ -11,6 +11,9 @@ public sealed partial class World
     private struct Targets
     {
         public int FoodNode, GameNode, WaterCell, Mate, TalkTo, Dependent;
+
+        // M3 (World.Society.cs): settlement store, construction site + material node, farm plot.
+        public int Store, Site, MatNode, Plot;
     }
 
     // ---- decision ---------------------------------------------------------------------------
@@ -64,6 +67,7 @@ public sealed partial class World
             t.TalkTo = FindNearestNpc(s, cfg.PerceptionRadius);
             c.TalkPartnerNearby = t.TalkTo >= 0;
         }
+        SocietyContext(s, stage, ref c, ref t);
         if (n.GoalUntil[s] > Tick) { c.Goal = n.GoalAction[s]; c.GoalBonus = n.GoalBonus[s]; }
         ApplyGoalTarget(s, ref c, ref t);
 
@@ -102,6 +106,7 @@ public sealed partial class World
         n.TargetNode[s] = Npcs.None;
         n.TargetNpc[s] = Npcs.None;
         float x = n.X[s], z = n.Z[s];
+        if (BeginSociety(s, action, in t, stage)) return;
         switch (action)
         {
             case ActionKind.Eat:
@@ -185,6 +190,7 @@ public sealed partial class World
         // While moving, ActTicks is the walking budget: generous for a straight line on rough ground,
         // so running out means the NPC is stuck against a coastline.
         Npcs.ActTicks[s] = (int)(Dist(Npcs.X[s], Npcs.Z[s], x, z) / (Config.WalkSpeed * 0.25f)) + 30;
+        PlanPath(s, x, z);
     }
 
     private void FollowNpc(int s, int targetSlot)
@@ -252,12 +258,19 @@ public sealed partial class World
         ActionKind.Court => 8,
         ActionKind.Talk => 6,
         ActionKind.Give => 2,
+        ActionKind.Rest => 40,
+        ActionKind.Build => 12,
+        ActionKind.Farm => 10,
+        ActionKind.Trade => 4,
+        ActionKind.Raid => 6,
+        ActionKind.Settle => 2,
         _ => 1,
     };
 
     /// <summary>Straight-line step on the cost field. Returns true on arrival; a blocked step ends the action.</summary>
     private bool Step(int s, LifeStage stage, float tx, float tz, float arrive)
     {
+        if (FollowPath(s, stage)) return false;
         var n = Npcs;
         float x = n.X[s], z = n.Z[s];
         float dx = tx - x, dz = tz - z;
@@ -299,6 +312,7 @@ public sealed partial class World
     {
         var n = Npcs;
         var cfg = Config;
+        if (CompleteSociety(s, stage)) return;
         switch (n.Action[s])
         {
             case ActionKind.Eat:

@@ -26,6 +26,15 @@ public struct DecisionContext
     public ActionKind Goal;
     public float GoalBonus;
 
+    // M3 society: work the settlement offers, the NPC's job, and standing orders.
+    public bool BuildWork, FarmWork;
+    public float BuildDistance, FarmDistance;
+    public bool IsBuilder, IsFarmer;
+    public bool TradeOrder, RaidOrder;
+
+    /// <summary>Far from home with a reason to go back (migrating, returning from a trip, or simply very far).</summary>
+    public bool HomeFar;
+
     /// <summary>A well-fed, rested, calm adult with nothing around. Tests start from this and change fields.</summary>
     public static DecisionContext Calm => new()
     {
@@ -119,8 +128,20 @@ public static class ActionScorer
             }
             case ActionKind.Pray:
                 return adult ? c.Piety * (0.45f * dPurpose + 0.3f * fear) : 0;
+            case ActionKind.Build:
+                if (!adult || !c.BuildWork) return 0;
+                return ((c.IsBuilder ? 0.45f : 0.1f) + 0.3f * dPurpose + 0.08f * c.Ambition) * comfort * Near(c.BuildDistance);
+            case ActionKind.Farm:
+                if (!adult || !c.FarmWork) return 0;
+                return ((c.IsFarmer ? 0.55f : 0.12f) + 0.3f * dPurpose) * comfort * Near(c.FarmDistance);
+            case ActionKind.Trade:
+                return adult && c.TradeOrder ? 0.7f * Math.Max(0.4f, comfort) : 0;
+            case ActionKind.Raid:
+                return adult && c.RaidOrder ? (0.55f + 0.35f * c.Aggression) * Math.Max(0.4f, comfort) * (0.5f + 0.5f * c.Safety) : 0;
+            case ActionKind.Settle:
+                return !infant && c.HomeFar ? (0.45f + 0.2f * dRest) * Math.Max(0.5f, comfort) : 0;
             default:
-                return 0; // M3/M4 actions.
+                return 0; // M4 actions.
         }
     }
 

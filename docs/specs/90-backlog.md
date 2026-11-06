@@ -10,12 +10,9 @@ M1 / M2 / Worker merge.
 | Item | Belongs to | Note |
 |---|---|---|
 | Animals are resource herds (`ResourceNodes` kind `game`), not agents | M3 or M8 | Plan wanted animals as simple agents; herds were enough for M1 food. Revisit when predators or herding matter. |
-| Traits equal genes | M3 | Blending with upbringing needs households. |
-| Movement is strictly straight-line with a move budget and an avoid-node memory | M3 | NPCs give up on targets behind a coast. Add grid pathing (A* on the cost field) once settlements and trade need it; sim truth stays off NavigationServer3D. |
 | `concepts.json` not loaded; `game/data/` does not exist | M4 | `IntentionValidator` already applies all `concepts.schema.json` rules to inventions. |
 | Truncated save body can leave a half-loaded world | M8 (save pass) | Garbage files are rejected; a good header with a cut-off body is not. Load into a scratch world and swap on success. |
 | ~4 KB per tick of allocation from birth/death/gossip events | M8 | 5,000 NPCs tick in 2.5 ms today; events are the remaining allocator. |
-| Population plateaus around 200, food-limited | M3 | Farming, storage and trade are what lift the cap. Keep the M1 population test ratio, do not retune it to hide this. |
 | `TryGetNpcDetail` is on-request with a 32-NPC watch list | M5 if the Mind needs more | Contract comment documents it. The spotlight picker should request details only for the NPCs it is about to think for. |
 
 ## Eden.Game (from M2, `40-game-client.md`)
