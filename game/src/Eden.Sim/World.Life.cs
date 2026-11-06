@@ -68,6 +68,8 @@ public sealed partial class World
 
         if (stage == LifeStage.Infant) { n.Phase[s] = ActionPhase.Done; return; }
 
+        UpdateKnowledge(s, stage);
+
         if (_possessed != Npcs.None && n.IdOf(s) == _possessed) { MovePossessed(s); return; }
 
         if (n.Phase[s] == ActionPhase.Done || (Tick + s) % cfg.DecisionIntervalTicks == 0) Decide(s, stage, night);
@@ -110,6 +112,7 @@ public sealed partial class World
         Memories.Reset(s);
         EnsureKnowledgeSlot(s);
         _knowledge[s]?.Clear();
+        GrantStarterKnowledge(s);
         Npcs.X[s] = x;
         Npcs.Z[s] = z;
         Npcs.Sex[s] = sex;
@@ -162,6 +165,7 @@ public sealed partial class World
         Memories.Reset(c);
         EnsureKnowledgeSlot(c);
         _knowledge[c]?.Clear();
+        KnowledgeState.ResetSlot(c);
         Npcs.GenesOf(c).Clear();
         Npcs.UnbornOf(mother).CopyTo(Npcs.GenesOf(c));
         Npcs.X[c] = Npcs.X[mother];
@@ -216,6 +220,7 @@ public sealed partial class World
         if (id == _possessed) _possessed = Npcs.None;
         Relationships.Forget(id);
         Memories.Reset(s);
+        OnKnowledgeHolderDied(s);
         _knowledge[s]?.Clear();
         Npcs.Free(s);
         TotalDeaths++;

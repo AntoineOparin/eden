@@ -336,9 +336,10 @@ public sealed partial class World
             case InventionIntention inv:
             {
                 _concepts[inv.Concept.Id] = inv.Concept;
+                OnInvention(inv.Concept);
                 SetKnowledge(s, inv.Concept.Id, 0.3f);
                 Events.Publish(new SimEvent(Tick, MemoryKind.Discovery, $"{Npcs.Name[s]} came up with {inv.Concept.Name}.", 7,
-                    [intention.NpcId], Npcs.X[s], Npcs.Z[s], Config.PerceptionRadius, "discovery", 6));
+                    [intention.NpcId], Npcs.X[s], Npcs.Z[s], Config.PerceptionRadius, "invention", 6));
                 break;
             }
         }
@@ -351,7 +352,9 @@ public sealed partial class World
     public void SetKnowledge(int slot, string conceptId, float proficiency)
     {
         EnsureKnowledgeSlot(slot);
+        float before = Proficiency(slot, conceptId);
         (_knowledge[slot] ??= new Dictionary<string, float>(StringComparer.Ordinal))[conceptId] = Math.Clamp(proficiency, 0f, 1f);
+        AfterKnowledgeSet(slot, conceptId, before);
     }
 
     /// <summary>Base action set in M1, plus actions unlocked by concepts the NPC knows (≥ 0.3).</summary>
@@ -366,7 +369,10 @@ public sealed partial class World
             case ActionKind.Hunt or ActionKind.Court or ActionKind.Give or ActionKind.Pray:
                 return adult;
         }
-        if (IsSocietyActionUnlocked(slot, action, adult)) return true;
+        bool societyAction = action is ActionKind.Build or ActionKind.Farm or ActionKind.Trade or ActionKind.Raid or ActionKind.Settle;
+        if (societyAction && !IsSocietyActionUnlocked(slot, action, adult)) return false; // M3: adulthood, settlement membership
+        if (societyAction && !Config.KnowledgeGatesActions) return true;
+        // M4: everything below here also needs a concept that unlocks the action.
         if (slot >= _knowledge.Length || _knowledge[slot] is not { } known) return false;
         foreach (var (id, p) in known)
         {

@@ -3,14 +3,15 @@
 Items that an earlier milestone left out on purpose, decided differently from the plan, or
 flagged as a question. Each line says where it belongs. Whoever executes that milestone owns the
 item; remove it from here in the same PR that resolves it. Last updated 2026-11-06 after the
-M1 / M2 / Worker merge.
+M3 / M4 merge.
 
 ## Eden.Sim (from M1, `10-sim-core.md`)
 
 | Item | Belongs to | Note |
 |---|---|---|
 | Animals are resource herds (`ResourceNodes` kind `game`), not agents | M3 or M8 | Plan wanted animals as simple agents; herds were enough for M1 food. Revisit when predators or herding matter. |
-| `concepts.json` not loaded; `game/data/` does not exist | M4 | `IntentionValidator` already applies all `concepts.schema.json` rules to inventions. |
+| Re-run the M4 "concept reaches a second settlement only after contact" test on real M3 settlements | M5 or next Sim pass | M4 proved it with two separated groups; the wiring (`World.Integration.cs`: BuildingKinds as `IBuildingUnlocks`, archives host records, farm yields use knowledge) landed at the M3/M4 merge. |
+| yieldMod on derived goods other than grain (fish, clay, hide, cloth, metals) has no producer yet | next Sim pass | Farming already multiplies grain by `World.YieldFactor`. Crafting a tool uses one unit of its first material node only. |
 | Truncated save body can leave a half-loaded world | M8 (save pass) | Garbage files are rejected; a good header with a cut-off body is not. Load into a scratch world and swap on success. |
 | ~4 KB per tick of allocation from birth/death/gossip events | M8 | 5,000 NPCs tick in 2.5 ms today; events are the remaining allocator. |
 | `TryGetNpcDetail` is on-request with a 32-NPC watch list | M5 if the Mind needs more | Contract comment documents it. The spotlight picker should request details only for the NPCs it is about to think for. |

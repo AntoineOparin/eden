@@ -6,8 +6,10 @@ using Eden.Sim.Contracts;
 //   dotnet run --project game/tools/Eden.Sim.Runner -- --seed 7 --years 60
 //   dotnet run --project game/tools/Eden.Sim.Runner -- --seeds 1..20 --years 60     (one summary line per seed)
 //   dotnet run --project game/tools/Eden.Sim.Runner -- --bench 5000                 (ms per tick at N NPCs)
+//   dotnet run --project game/tools/Eden.Sim.Runner -- --seed 7 --years 200 --knowledge (concepts known anywhere per decade)
 
 int seed = 7, years = 60, tail = 15, bench = 0, traceDays = 0;
+bool knowledge = false;
 (int from, int to)? sweep = null;
 for (int i = 0; i < args.Length; i++)
 {
@@ -19,6 +21,7 @@ for (int i = 0; i < args.Length; i++)
         case "--tail": tail = int.Parse(Next()); break;
         case "--bench": bench = int.Parse(Next()); break;
         case "--trace": traceDays = int.Parse(Next()); break;
+        case "--knowledge": knowledge = true; break;
         case "--seeds":
         {
             var parts = Next().Split("..");
@@ -34,6 +37,7 @@ for (int i = 0; i < args.Length; i++)
 if (bench > 0) return Bench(bench);
 if (traceDays > 0) return Trace(seed, traceDays);
 if (sweep is { } range) return Sweep(range.from, range.to, years);
+if (knowledge) return Knowledge(seed, years);
 
 var world = new World(new SimConfig { Seed = seed });
 Console.WriteLine($"Eden seed {seed}, {years} years ({world.Config.TicksPerYear} ticks/year)");
@@ -120,5 +124,58 @@ static int Trace(int seed, int days)
             Console.WriteLine($"hp={n.Health[s]:F2}");
         }
     }
+    return 0;
+}
+
+// Per decade: population, concepts known anywhere (living knower or written record), records, and what changed.
+static int Knowledge(int seed, int years)
+{
+    var w = new World(new SimConfig { Seed = seed });
+    var g = w.Graph;
+    Console.WriteLine($"Eden seed {seed}, {years} years, {g.Count} concepts; first NPCs know {string.Join(", ", ConceptGraph.StarterSet)}");
+    Console.WriteLine(" year  pop  known  records  gained / lost this decade");
+    var before = new bool[g.Count];
+    for (int i = 0; i < g.Count; i++) before[i] = g.KnownAnywhere(i);
+    Console.WriteLine($" {0,4} {w.Population,4} {g.KnownAnywhereCount(),6} {w.Records.Count,8}");
+    for (int y = 1; y <= years; y++)
+    {
+        for (int t = 0; t < w.Config.TicksPerYear; t++) w.Step();
+        if (y % 10 != 0 && y != years && w.Population > 0) continue;
+        var gained = new List<string>();
+        var lost = new List<string>();
+        for (int i = 0; i < g.Count; i++)
+        {
+            bool now = g.KnownAnywhere(i);
+            if (now && !before[i]) gained.Add(g[i].Id);
+            if (!now && before[i]) lost.Add("-" + g[i].Id);
+            before[i] = now;
+        }
+        gained.AddRange(lost);
+        Console.WriteLine($" {y,4} {w.Population,4} {g.KnownAnywhereCount(),6} {w.Records.Count,8}  {string.Join(" ", gained)}");
+        if (w.Population == 0) { Console.WriteLine($" extinct in year {y}"); break; }
+    }
+    // Frontier: unknown concepts and the best any living NPC does on their weakest prerequisite.
+    var frontier = new List<string>();
+    for (int i = 0; i < g.Count; i++)
+    {
+        if (g.KnownAnywhere(i)) continue;
+        float best = 0;
+        string weakest = "";
+        for (int s = 0; s < w.Npcs.HighWater; s++)
+        {
+            if (!w.Npcs.Alive[s]) continue;
+            float min = 1;
+            string weak = "";
+            foreach (int p in g[i].Prereqs)
+            {
+                float v = w.Proficiency(s, g[p].Id);
+                if (v < min) { min = v; weak = g[p].Id; }
+            }
+            if (min > best) { best = min; weakest = weak; }
+        }
+        frontier.Add($"{g[i].Id}({best:F2}{(weakest.Length > 0 ? " " + weakest : "")})");
+    }
+    if (frontier.Count > 0 && w.Population > 0) Console.WriteLine($"\nnot known (best weakest prerequisite): {string.Join(", ", frontier)}");
+    Console.WriteLine($"\nstate hash {w.StateHash():X16}");
     return 0;
 }

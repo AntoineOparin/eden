@@ -13,7 +13,7 @@ public class IntentionValidatorTests
     private static GoalIntention Goal(int id, ActionKind a, string? target = null, int priority = 5)
         => new(id, 0, IntentionSource.Llm, a, target, null, priority);
 
-    private static ConceptProposal Concept(string id = "fire", IReadOnlyList<string>? prereqs = null, params ConceptEffect[] effects)
+    private static ConceptProposal Concept(string id = "ember-keeping", IReadOnlyList<string>? prereqs = null, params ConceptEffect[] effects)
         => new(id, "Fire", "Keeping a flame alive.", prereqs ?? [], 0.3f,
             effects.Length > 0 ? effects : [new ConceptEffect(ConceptEffectKind.UnlockAction, Action: ActionKind.Craft)]);
 
@@ -106,15 +106,15 @@ public class IntentionValidatorTests
     {
         var (w, a, b) = Pair();
         Assert.Null(w.Apply(new InventionIntention(a, 0, IntentionSource.Llm, Concept())));
-        Assert.Equal(0.3f, w.Proficiency(0, "fire"));
+        Assert.Equal(0.3f, w.Proficiency(0, "ember-keeping"));
         Assert.True(w.IsActionUnlocked(0, ActionKind.Craft));
         Assert.False(w.IsActionUnlocked(1, ActionKind.Craft));
         Assert.Equal("concept already exists", w.Validator.Reject(new InventionIntention(b, 0, IntentionSource.Llm, Concept())));
 
-        // Prerequisites must be mastered (>= 0.6), not just known.
+        // Prerequisites must be mastered (>= 0.8 for inventions, 50-knowledge-data.md), not just known.
         var smelting = Concept("smelting", ["fire"]);
         Assert.Equal("prerequisite fire not mastered", w.Validator.Reject(new InventionIntention(a, 0, IntentionSource.Llm, smelting)));
-        w.SetKnowledge(0, "fire", 0.7f);
+        w.SetKnowledge(0, "fire", 0.85f);
         Assert.Null(w.Validator.Reject(new InventionIntention(a, 0, IntentionSource.Llm, smelting)));
     }
 

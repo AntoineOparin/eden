@@ -11,4 +11,8 @@
     <Compile Include="$(EdenContractsDir)ISimHost.cs" Link="Contracts/ISimHost.cs" />
     <Compile Include="$(EdenContractsDir)Intention.cs" Link="Contracts/Intention.cs" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- M4 knowledge data (game/data/*.json), embedded so the sim, tests, runner and Godot all load the same files. -->
+    <EmbeddedResource Include="../../data/*.json" LogicalName="Eden.Sim.Data.%(Filename)%(Extension)" Link="Data/%(Filename)%(Extension)" />
+  </ItemGroup>
 </Project>

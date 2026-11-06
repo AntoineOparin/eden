@@ -9,7 +9,8 @@ internal static class Villages
     /// <summary>A 2-person world and an inland spot near the genesis pair with room for a village.</summary>
     public static (World w, float x, float z) World(int seed, SimConfig? config = null)
     {
-        var w = new World((config ?? new SimConfig()) with { Seed = seed });
+        // Mechanics tests exercise society without the M4 knowledge gate; the Slow acceptance test keeps the gate on.
+        var w = new World((config ?? new SimConfig()) with { Seed = seed, KnowledgeGatesActions = false });
         var (x, z) = SpotAway(w, w.Npcs.X[0], w.Npcs.Z[0], 0f, 80f);
         return (w, x, z);
     }

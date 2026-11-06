@@ -1,0 +1,19 @@
+[
+  { "id": "tree", "name": "Wood", "node": true, "description": "Standing trees; felled for wood." },
+  { "id": "stone", "name": "Stone", "node": true, "description": "Loose rock and outcrops." },
+  { "id": "ore", "name": "Ore", "node": true, "description": "Coloured rock that gives metal in a hot fire." },
+  { "id": "berry", "name": "Berries", "node": true, "description": "Wild fruit, nuts and roots." },
+  { "id": "game", "name": "Game", "node": true, "description": "Herds of wild animals." },
+  { "id": "grain", "name": "Grain", "node": false, "description": "Seed crops grown on farm plots." },
+  { "id": "meat", "name": "Meat", "node": false, "description": "Butchered game." },
+  { "id": "fish", "name": "Fish", "node": false, "description": "Fish from the shore and the sea." },
+  { "id": "clay", "name": "Clay", "node": false, "description": "Wet earth dug from riverbanks." },
+  { "id": "hide", "name": "Hide", "node": false, "description": "Skins of hunted animals." },
+  { "id": "fiber", "name": "Fiber", "node": false, "description": "Plant stalks twisted into cord." },
+  { "id": "herbs", "name": "Herbs", "node": false, "description": "Leaves and roots used as medicine." },
+  { "id": "salt", "name": "Salt", "node": false, "description": "Salt scraped from dried sea water." },
+  { "id": "cloth", "name": "Cloth", "node": false, "description": "Woven fabric." },
+  { "id": "copper", "name": "Copper", "node": false, "description": "Soft red metal smelted from ore." },
+  { "id": "bronze", "name": "Bronze", "node": false, "description": "Hard metal of copper and tin." },
+  { "id": "iron", "name": "Iron", "node": false, "description": "Dark metal smelted in a very hot fire." }
+]

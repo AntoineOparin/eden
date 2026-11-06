@@ -17,7 +17,7 @@ public sealed record BuildingKind(string Id, int Wood, int Stone, int Work, floa
 /// (one per <see cref="World"/>, <see cref="World.BuildingKinds"/>) records which kinds each settlement may build.
 /// M4's <c>EffectApplier</c> calls <see cref="Unlock"/> for <c>unlockBuilding</c> effects.
 /// </summary>
-public sealed class BuildingKinds
+public sealed class BuildingKinds : IBuildingUnlocks
 {
     public const int Hut = 0, Storehouse = 1, FarmPlot = 2, Well = 3, Kiln = 4, Workshop = 5, Shrine = 6, Archive = 7, Wall = 8, Dock = 9;
 
@@ -406,6 +406,7 @@ public sealed partial class World
         int kind = b.Kind[site];
         TotalBuildingsCompleted++;
         RefreshStores();
+        if (kind == BuildingKinds.Archive) AddRecordSite(b.X[site], b.Z[site], site); // M4 written records live in archives
         if (kind is BuildingKinds.Storehouse or BuildingKinds.Well && Settlements.IsAlive(set))
         {
             string what = kind == BuildingKinds.Storehouse ? "a storehouse" : "a well";

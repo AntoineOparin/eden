@@ -54,10 +54,12 @@ public sealed partial class World
         Npcs = new Npcs(64);
         Memories = new MemoryStore(config.MemoryCap, config.TicksPerDay);
         _knowledge = new Dictionary<string, float>?[64];
+        InitKnowledge();
         _grid = new SpatialGrid(Terrain.MaxX + Terrain.CellSize, Terrain.MaxZ + Terrain.CellSize, 32f);
         Validator = new IntentionValidator(this);
         Events.Subscribe(RecordEvent);
         InitSociety();
+        InitIntegration();
 
         var (sx, sz) = WorldGen.PickStart(Terrain, Resources, ref Rng);
         var names = new List<string>();

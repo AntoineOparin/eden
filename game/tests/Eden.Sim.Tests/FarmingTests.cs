@@ -5,7 +5,7 @@ public class FarmingTests
     [Fact]
     public void Seasons_follow_the_day_of_year()
     {
-        var w = new World(new SimConfig { Seed = 1, StartingNpcs = 0 });
+        var w = new World(new SimConfig { Seed = 1, StartingNpcs = 0, KnowledgeGatesActions = false }); // farming mechanics only, no knowledge gate
         var seasons = Enumerable.Range(0, 10).Select(w.Season).ToArray();
         Assert.Equal(
             [SeasonKind.Spring, SeasonKind.Spring, SeasonKind.Spring, SeasonKind.Summer, SeasonKind.Summer, SeasonKind.Summer,
