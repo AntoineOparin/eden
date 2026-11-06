@@ -1,0 +1,1 @@
+{ "plan": [ { "action": "summon_dragon", "target": "sky" } ], "say": "hi", "extra": true }

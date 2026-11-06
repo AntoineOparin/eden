@@ -1,0 +1,5 @@
+EDEN_SHARED_SECRET=change-me-dev
+# Optional direct providers (leave unset to keep Workers AI only)
+# ANTHROPIC_API_KEY=
+# OPENAI_API_KEY=
+# OPENAI_BASE_URL=https://api.openai.com/v1

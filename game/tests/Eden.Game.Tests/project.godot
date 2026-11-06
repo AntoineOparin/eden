@@ -1,0 +1,16 @@
+; Test-harness Godot project for gdUnit4Net. The adapter launches Godot with this directory as the
+; project root, so it mirrors the game project through symlinks (scenes, src, data, assets, shaders).
+config_version=5
+
+[application]
+
+config/name="Eden.Game.Tests"
+config/features=PackedStringArray("4.7", "C#", "Forward Plus")
+
+[dotnet]
+
+project/assembly_name="Eden.Game.Tests"
+
+[rendering]
+
+renderer/rendering_method="forward_plus"

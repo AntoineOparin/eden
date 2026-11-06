@@ -1,0 +1,13 @@
+{
+  "name": "eden-root",
+  "private": true,
+  "type": "module",
+  "description": "Root tooling only: contract validation. The game lives in game/, the Worker in brain/.",
+  "scripts": {
+    "validate-contracts": "node scripts/validate-contracts.mjs"
+  },
+  "devDependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1"
+  }
+}

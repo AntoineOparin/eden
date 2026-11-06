@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eden.local/contracts/chat.schema.json",
+  "title": "POST /chat",
+  "description": "Player (god or possessed NPC) talking to an NPC. Highest priority in the mind pool.",
+  "$defs": {
+    "speaker": { "type": "string", "enum": ["god", "npc", "possessed"] },
+    "turn": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["speaker", "text"],
+      "properties": {
+        "speaker": { "$ref": "#/$defs/speaker" },
+        "text": { "type": "string", "minLength": 1, "maxLength": 1000 }
+      }
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["npc", "memories", "worldRules", "speaker", "speakerName", "history", "message"],
+      "properties": {
+        "npc": { "$ref": "common.schema.json#/$defs/npcContext" },
+        "memories": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/memoryLine" }, "maxItems": 40 },
+        "worldRules": { "$ref": "common.schema.json#/$defs/longText" },
+        "speaker": { "$ref": "#/$defs/speaker" },
+        "speakerName": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "history": { "type": "array", "items": { "$ref": "#/$defs/turn" }, "maxItems": 20 },
+        "message": { "type": "string", "minLength": 1, "maxLength": 1000 }
+      }
+    },
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reply"],
+      "properties": {
+        "reply": { "type": "string", "minLength": 1, "maxLength": 600 },
+        "memory": { "oneOf": [{ "$ref": "think.schema.json#/$defs/belief" }, { "type": "null" }] },
+        "mood": { "type": ["string", "null"], "enum": ["calm", "happy", "afraid", "angry", "sad", "awed", "suspicious", null] }
+      }
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["response", "usage"],
+      "properties": {
+        "response": { "$ref": "#/$defs/response" },
+        "usage": { "$ref": "common.schema.json#/$defs/usage" }
+      }
+    }
+  }
+}

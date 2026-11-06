@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eden.local/contracts/think.schema.json",
+  "title": "POST /think",
+  "description": "A thinking NPC's thought cycle. Request is built by Eden.Mind; response is produced by the LLM and validated by the Worker (Zod) and again by Eden.Mind (C#).",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["npc", "memories", "worldRules", "situation"],
+      "properties": {
+        "npc": { "$ref": "common.schema.json#/$defs/npcContext" },
+        "memories": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/memoryLine" }, "maxItems": 40 },
+        "worldRules": { "$ref": "common.schema.json#/$defs/longText" },
+        "situation": { "$ref": "common.schema.json#/$defs/longText" },
+        "maxGoals": { "type": "integer", "minimum": 1, "maximum": 5, "default": 3 },
+        "allowInvention": { "type": "boolean", "default": false }
+      }
+    },
+    "goal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action"],
+      "properties": {
+        "action": { "$ref": "common.schema.json#/$defs/action" },
+        "target": { "type": ["string", "null"], "maxLength": 64 },
+        "reason": { "type": ["string", "null"], "maxLength": 200 }
+      }
+    },
+    "belief": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text", "importance"],
+      "properties": {
+        "text": { "$ref": "common.schema.json#/$defs/shortText" },
+        "importance": { "$ref": "common.schema.json#/$defs/importance" }
+      }
+    },
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["plan"],
+      "properties": {
+        "plan": { "type": "array", "items": { "$ref": "#/$defs/goal" }, "minItems": 0, "maxItems": 5 },
+        "say": { "type": ["string", "null"], "maxLength": 280 },
+        "belief": { "oneOf": [{ "$ref": "#/$defs/belief" }, { "type": "null" }] },
+        "invention": { "oneOf": [{ "$ref": "concepts.schema.json#/$defs/concept" }, { "type": "null" }] }
+      }
+    },
+    "result": {
+      "description": "What the Worker returns on 200: the validated response plus usage.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["response", "usage"],
+      "properties": {
+        "response": { "$ref": "#/$defs/response" },
+        "usage": { "$ref": "common.schema.json#/$defs/usage" }
+      }
+    }
+  }
+}

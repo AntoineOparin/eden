@@ -1,0 +1,32 @@
+<Project Sdk="Godot.NET.Sdk/4.7.2">
+  <!--
+    gdUnit4Net scene tests. The adapter launches Godot with THIS directory as the Godot project
+    (see project.godot here), and Godot only binds scripts from the project's own assembly, so the
+    game scripts are compiled into this assembly through the src/ symlink instead of referencing
+    Eden.Game.csproj. Needs GODOT_BIN (scripts/check.sh sets it).
+  -->
+  <PropertyGroup>
+    <!-- Explicit on purpose: the Godot editor inserts net8.0 into any Godot-SDK csproj that lacks it. -->
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Eden.Game.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <NoWarn>NU1605</NoWarn>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="*.cs" />
+    <Compile Include="src/Eden.Game/**/*.cs" />
+    <Compile Include="gdunit4_testadapter*/**/*.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
+    <PackageReference Include="gdUnit4.api" Version="5.1.0-rc6" />
+    <PackageReference Include="gdUnit4.test.adapter" Version="3.2.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Eden.Sim/Eden.Sim.csproj" />
+    <ProjectReference Include="../../src/Eden.Mind/Eden.Mind.csproj" />
+  </ItemGroup>
+</Project>

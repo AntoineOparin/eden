@@ -1,0 +1,2 @@
+{ "id": "irrigation", "name": "Irrigation", "description": "Channels that bring water to fields.", "prerequisites": ["farming"], "difficulty": 0.5,
+  "effects": [ { "type": "yieldMod", "resource": "grain", "factor": 1.5 } ] }

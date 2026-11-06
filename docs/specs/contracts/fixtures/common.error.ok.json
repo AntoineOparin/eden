@@ -1,0 +1,1 @@
+{ "error": { "code": "invalid_output", "message": "LLM output failed schema after repair retry", "details": { "issues": 2 } } }

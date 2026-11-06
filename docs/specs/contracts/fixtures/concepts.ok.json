@@ -1,0 +1,18 @@
+[
+  {
+    "id": "fire", "name": "Fire", "description": "Keeping and making fire for warmth and cooking.",
+    "prerequisites": [], "difficulty": 0.1,
+    "effects": [ { "type": "unlockAction", "action": "craft" }, { "type": "yieldMod", "resource": "meat", "factor": 1.3 } ],
+    "tags": ["survival"]
+  },
+  {
+    "id": "pottery", "name": "Pottery", "description": "Shaping and firing clay into vessels.",
+    "prerequisites": ["fire"], "difficulty": 0.35,
+    "effects": [ { "type": "unlockTool", "tool": "clay-pot" }, { "type": "unlockBuilding", "building": "kiln" } ]
+  },
+  {
+    "id": "sky-worship", "name": "Sky worship", "description": "The sky is a person who can be angered or pleased.",
+    "prerequisites": [], "difficulty": 0.2,
+    "effects": [ { "type": "belief", "text": "The sky watches and judges." } ]
+  }
+]

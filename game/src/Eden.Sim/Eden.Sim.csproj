@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Pure simulation. No Godot. Deterministic. See docs/specs/10-sim-core.md -->
+  <PropertyGroup>
+    <RootNamespace>Eden.Sim</RootNamespace>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Contracts are owned by docs/specs/contracts/; edit them there. -->
+    <Compile Include="$(EdenContractsDir)IWorldSnapshot.cs" Link="Contracts/IWorldSnapshot.cs" />
+    <Compile Include="$(EdenContractsDir)ISimHost.cs" Link="Contracts/ISimHost.cs" />
+    <Compile Include="$(EdenContractsDir)Intention.cs" Link="Contracts/Intention.cs" />
+  </ItemGroup>
+</Project>

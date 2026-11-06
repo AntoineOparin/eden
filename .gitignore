@@ -1,0 +1,26 @@
+# .NET
+bin/
+obj/
+*.user
+TestResults/
+
+# Godot (editor cache, gdUnit4 injected runner scene)
+**/.godot/
+game/android/
+game/gdunit4_testadapter*/
+game/tests/Eden.Game.Tests/gdunit4_testadapter*/
+*.import.tmp
+
+# Node / Workers
+node_modules/
+brain/dist/
+brain/.wrangler/
+brain/.dev.vars
+
+# OS / editors
+.DS_Store
+.idea/
+.vs/
+.vscode/*
+!.vscode/settings.json
+*.log

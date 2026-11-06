@@ -1,0 +1,1 @@
+{ "model": "@cf/baai/bge-m3", "dimensions": 3, "vectors": [[0.1, 0.2, 0.3], [0.0, -0.5, 0.25]] }

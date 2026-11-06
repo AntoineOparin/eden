@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Cognition layer. References Eden.Sim only. No Godot. See docs/specs/20-mind.md -->
+  <PropertyGroup>
+    <RootNamespace>Eden.Mind</RootNamespace>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(EdenContractsDir)IBrainProvider.cs" Link="Contracts/IBrainProvider.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Eden.Sim/Eden.Sim.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eden.local/contracts/concepts.schema.json",
+  "title": "Concept graph",
+  "description": "game/data/concepts.json is an array of concept. LLM inventions are a single concept. Effects use only the primitive vocabulary; anything else is rejected.",
+  "type": "array",
+  "items": { "$ref": "#/$defs/concept" },
+  "$defs": {
+    "effect": {
+      "type": "object",
+      "required": ["type"],
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "required": ["type", "resource", "factor"],
+          "properties": {
+            "type": { "const": "yieldMod" },
+            "resource": { "$ref": "common.schema.json#/$defs/identifier" },
+            "factor": { "type": "number", "minimum": 0.5, "maximum": 3 }
+          }
+        },
+        {
+          "additionalProperties": false,
+          "required": ["type", "building"],
+          "properties": {
+            "type": { "const": "unlockBuilding" },
+            "building": { "$ref": "common.schema.json#/$defs/identifier" }
+          }
+        },
+        {
+          "additionalProperties": false,
+          "required": ["type", "tool"],
+          "properties": {
+            "type": { "const": "unlockTool" },
+            "tool": { "$ref": "common.schema.json#/$defs/identifier" }
+          }
+        },
+        {
+          "additionalProperties": false,
+          "required": ["type", "action"],
+          "properties": {
+            "type": { "const": "unlockAction" },
+            "action": { "$ref": "common.schema.json#/$defs/action" }
+          }
+        },
+        {
+          "additionalProperties": false,
+          "required": ["type", "text"],
+          "properties": {
+            "type": { "const": "belief" },
+            "text": { "$ref": "common.schema.json#/$defs/shortText" }
+          }
+        }
+      ]
+    },
+    "concept": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "description", "prerequisites", "difficulty", "effects"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/identifier" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 48 },
+        "description": { "type": "string", "minLength": 1, "maxLength": 400 },
+        "prerequisites": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/identifier" }, "maxItems": 6, "uniqueItems": true },
+        "difficulty": { "$ref": "common.schema.json#/$defs/unitInterval" },
+        "effects": { "type": "array", "items": { "$ref": "#/$defs/effect" }, "minItems": 1, "maxItems": 6 },
+        "tags": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/identifier" }, "maxItems": 8 }
+      }
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "eden-brain",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  "ai": { "binding": "AI" },
+  "vars": {
+    "BRAIN_PROVIDER": "workers-ai",
+    "THINK_MODEL": "@cf/qwen/qwen3-30b-a3b-fp8",
+    "EMBED_MODEL": "@cf/baai/bge-m3",
+  },
+  // Secrets (never here): EDEN_SHARED_SECRET (required), ANTHROPIC_API_KEY, OPENAI_API_KEY (optional).
+  // Local: copy .dev.vars.example to .dev.vars. Production: npx wrangler secret put <NAME>.
+}

@@ -1,0 +1,9 @@
+{
+  "plan": [
+    { "action": "gather", "target": "berries", "reason": "food is low before night" },
+    { "action": "talk", "target": "2", "reason": "ask Adam about the lightning" }
+  ],
+  "say": "The sky struck the hill. We should not sleep there.",
+  "belief": { "text": "The sky is angry at the hill.", "importance": 7 },
+  "invention": null
+}

@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eden.local/contracts/embed.schema.json",
+  "title": "POST /embed",
+  "description": "Batch text embeddings for memory retrieval. Default model bge-m3 (1024 dims).",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["texts"],
+      "properties": {
+        "texts": { "type": "array", "minItems": 1, "maxItems": 64, "items": { "type": "string", "minLength": 1, "maxLength": 2000 } }
+      }
+    },
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "dimensions", "vectors"],
+      "properties": {
+        "model": { "type": "string" },
+        "dimensions": { "type": "integer", "minimum": 1 },
+        "vectors": { "type": "array", "minItems": 1, "items": { "type": "array", "items": { "type": "number" }, "minItems": 1 } }
+      }
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["response", "usage"],
+      "properties": {
+        "response": { "$ref": "#/$defs/response" },
+        "usage": { "$ref": "common.schema.json#/$defs/usage" }
+      }
+    }
+  }
+}

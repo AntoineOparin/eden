@@ -1,0 +1,4 @@
+[
+  { "id": "Bronze Working", "name": "Bronze", "description": "x", "prerequisites": [], "difficulty": 0.5,
+    "effects": [ { "type": "spawnUnit", "unit": "dragon" } ] }
+]

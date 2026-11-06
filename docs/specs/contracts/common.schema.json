@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eden.local/contracts/common.schema.json",
+  "title": "Eden shared definitions",
+  "$defs": {
+    "action": {
+      "description": "Fixed goal vocabulary. Mirrors Eden.Sim.Contracts.ActionKind (camelCase).",
+      "type": "string",
+      "enum": ["idle", "eat", "drink", "rest", "gather", "hunt", "build", "farm", "craft", "court", "teach", "learn", "trade", "raid", "flee", "pray", "explore", "talk", "give", "settle", "invent"]
+    },
+    "importance": { "type": "integer", "minimum": 1, "maximum": 10 },
+    "unitInterval": { "type": "number", "minimum": 0, "maximum": 1 },
+    "shortText": { "type": "string", "minLength": 1, "maxLength": 280 },
+    "longText": { "type": "string", "maxLength": 4000 },
+    "identifier": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,47}$" },
+    "memoryLine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tick", "text", "importance"],
+      "properties": {
+        "tick": { "type": "integer", "minimum": 0 },
+        "text": { "$ref": "#/$defs/shortText" },
+        "importance": { "$ref": "#/$defs/importance" }
+      }
+    },
+    "npcContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "ageYears", "persona", "traits", "needs", "knowledge", "currentGoals", "location"],
+      "properties": {
+        "id": { "type": "integer", "minimum": 0 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "ageYears": { "type": "integer", "minimum": 0, "maximum": 200 },
+        "persona": { "$ref": "#/$defs/longText" },
+        "traits": { "type": "object", "additionalProperties": { "$ref": "#/$defs/unitInterval" }, "maxProperties": 32 },
+        "needs": { "type": "object", "additionalProperties": { "$ref": "#/$defs/unitInterval" }, "maxProperties": 16 },
+        "knowledge": { "type": "array", "items": { "$ref": "#/$defs/identifier" }, "maxItems": 64 },
+        "currentGoals": { "type": "array", "items": { "$ref": "#/$defs/shortText" }, "maxItems": 8 },
+        "location": { "$ref": "#/$defs/shortText" }
+      }
+    },
+    "usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inputTokens", "outputTokens", "neurons", "model"],
+      "properties": {
+        "inputTokens": { "type": "integer", "minimum": 0 },
+        "outputTokens": { "type": "integer", "minimum": 0 },
+        "neurons": { "type": "number", "minimum": 0 },
+        "model": { "type": "string" }
+      }
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["error"],
+      "properties": {
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code", "message"],
+          "properties": {
+            "code": { "type": "string", "enum": ["bad_request", "unauthorized", "invalid_output", "provider_error", "budget_exceeded", "unsupported", "not_found"] },
+            "message": { "type": "string" },
+            "details": {}
+          }
+        }
+      }
+    }
+  }
+}

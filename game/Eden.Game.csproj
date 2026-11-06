@@ -1,0 +1,20 @@
+<Project Sdk="Godot.NET.Sdk/4.7.2">
+  <!-- Godot requires this csproj at the project root. Sources live in src/Eden.Game/. -->
+  <PropertyGroup>
+    <!-- Explicit on purpose: the Godot editor inserts net8.0 into any Godot-SDK csproj that lacks it. -->
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Eden.Game</RootNamespace>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <!-- Godot (play mode) initialises the .NET runtime from this file; class libraries do not emit it by default. -->
+    <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="src/Eden.Game/**/*.cs" />
+    <!-- gdUnit4's test adapter drops its runner scene here at test time; Godot must compile it. -->
+    <Compile Include="gdunit4_testadapter*/**/*.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="src/Eden.Sim/Eden.Sim.csproj" />
+    <ProjectReference Include="src/Eden.Mind/Eden.Mind.csproj" />
+  </ItemGroup>
+</Project>

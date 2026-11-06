@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- xUnit 2.x on VSTest on purpose: gdUnit4's adapter is VSTest-only and .NET 10 cannot mix
+       VSTest and Microsoft.Testing.Platform projects in one `dotnet test Eden.sln`. -->
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>Eden.Sim.Tests</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <PackageReference Include="JsonSchema.Net" Version="9.6.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Eden.Sim/Eden.Sim.csproj" />
+    <ProjectReference Include="../../src/Eden.Mind/Eden.Mind.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+</Project>

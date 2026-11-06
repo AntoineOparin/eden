@@ -1,0 +1,4 @@
+{
+  "response": { "plan": [ { "action": "eat", "target": null, "reason": null } ], "say": null, "belief": null, "invention": null },
+  "usage": { "inputTokens": 812, "outputTokens": 96, "neurons": 6.68, "model": "@cf/qwen/qwen3-30b-a3b-fp8" }
+}
