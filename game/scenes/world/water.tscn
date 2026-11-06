@@ -1,0 +1,17 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://src/Eden.Game/World/WaterPlane.cs" id="1_water"]
+[ext_resource type="Shader" path="res://shaders/water.gdshader" id="2_shader"]
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_sea"]
+size = Vector2(3072, 3072)
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_water"]
+render_priority = 0
+shader = ExtResource("2_shader")
+
+[node name="Water" type="MeshInstance3D"]
+cast_shadow = 0
+mesh = SubResource("PlaneMesh_sea")
+material_override = SubResource("ShaderMaterial_water")
+script = ExtResource("1_water")
