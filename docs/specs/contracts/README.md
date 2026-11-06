@@ -21,6 +21,9 @@ The `.cs` files are linked as compile items into `game/src/Eden.Sim/Eden.Sim.csp
 
 Invariants enforced by tests:
 
+- `BiomeId` (C#) is the meaning of every byte in `IWorldSnapshot.Biomes`; the grid layout
+  (`z * Width + x`, origin at world 0,0, cell at `x * CellSize`) is documented on `WorldInfo`.
+  Added 2026-11-06 after M2 had to assume both.
 - `ActionKind` (C#) == `common.schema.json#/$defs/action` enum, camelCase.
 - `ConceptEffectKind` (C#) == the `const` values of `concepts.schema.json#/$defs/effect`.
 - Every `*.ok.json` fixture deserialises into the C# DTOs and parses with the Zod schemas;

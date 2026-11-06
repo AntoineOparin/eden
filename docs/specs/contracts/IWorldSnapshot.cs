@@ -9,6 +9,20 @@ using System.Collections.Generic;
 
 namespace Eden.Sim.Contracts;
 
+/// <summary>
+/// Meaning of each byte in <see cref="IWorldSnapshot.Biomes"/>. Eden.Sim assigns them from height and
+/// moisture; Eden.Game maps them to splat layers. Add new values at the end only (saves store the byte).
+/// </summary>
+public enum BiomeId : byte
+{
+    Ocean = 0,
+    Beach = 1,
+    Grassland = 2,
+    Forest = 3,
+    Mountain = 4,
+    Snow = 5,
+}
+
 public enum Sex : byte { Female, Male }
 
 public enum LifeStage : byte { Infant, Child, Adult, Elder }
@@ -37,7 +51,13 @@ public readonly record struct BuildingView(
     int SettlementId,
     float Progress);
 
-/// <summary>Static world description; fixed for the lifetime of a world (terraforming updates the heightmap).</summary>
+/// <summary>
+/// Static world description; fixed for the lifetime of a world (terraforming updates the heightmap).
+/// Grid layout, shared by <see cref="IWorldSnapshot.Heights"/> and <see cref="IWorldSnapshot.Biomes"/>:
+/// row-major, cell (x, z) lives at index <c>z * Width + x</c>, the map origin is world (0, 0) and
+/// cell (x, z) sits at world position <c>(x * CellSize, height, z * CellSize)</c>, Y up, metres.
+/// Heights are absolute metres; cells at or below <see cref="SeaLevel"/> are under water.
+/// </summary>
 public sealed record WorldInfo(
     int Seed,
     int Width,
@@ -77,10 +97,10 @@ public interface IWorldSnapshot
     float HourOfDay { get; }
     WorldInfo World { get; }
 
-    /// <summary>Heightmap in metres, row-major, length Width*Height.</summary>
+    /// <summary>Heightmap in metres, length Width*Height, layout as documented on <see cref="WorldInfo"/>.</summary>
     ReadOnlyMemory<float> Heights { get; }
 
-    /// <summary>Biome id per cell, same layout as <see cref="Heights"/>.</summary>
+    /// <summary><see cref="BiomeId"/> per cell as a byte, same layout as <see cref="Heights"/>.</summary>
     ReadOnlyMemory<byte> Biomes { get; }
 
     int Population { get; }
