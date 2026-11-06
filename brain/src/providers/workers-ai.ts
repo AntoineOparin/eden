@@ -1,17 +1,10 @@
 import type { BrainProvider, Completion, CompletionInput, Embedding } from "./types";
 import { ProviderError } from "./types";
+import { asInt, isNumberArray, messageOf, readChatCompletion } from "./chat-completion";
 
 /** Minimal view of the AI binding so the adapter is not tied to the generated per-model overloads. */
 export interface AiRunner {
   run(model: string, inputs: Record<string, unknown>): Promise<unknown>;
-}
-
-interface ChatCompletionLike {
-  response?: unknown;
-  choices?: Array<{
-    message?: { content?: unknown; reasoning_content?: unknown; reasoning?: unknown };
-  }>;
-  usage?: { prompt_tokens?: unknown; completion_tokens?: unknown };
 }
 
 interface EmbeddingLike {
@@ -19,9 +12,6 @@ interface EmbeddingLike {
   shape?: unknown;
   usage?: { prompt_tokens?: unknown };
 }
-
-const asInt = (v: unknown): number =>
-  typeof v === "number" && Number.isFinite(v) ? Math.round(v) : 0;
 
 /** Default provider: Cloudflare Workers AI through the `AI` binding. Free tier, no key. */
 export class WorkersAiProvider implements BrainProvider {
@@ -58,15 +48,8 @@ export class WorkersAiProvider implements BrainProvider {
       throw new ProviderError(`Workers AI ${this.thinkModel} failed: ${messageOf(e)}`);
     }
 
-    const out = (raw ?? {}) as ChatCompletionLike;
-    const msg = out.choices?.[0]?.message;
-    // Observed live (2026-11-06): with thinking disabled, Workers AI's reasoning parser can file the
-    // whole answer under `reasoning_content` / `reasoning` and leave `content` null. Take the first
-    // non-empty field; the JSON is validated afterwards either way.
-    const content = firstText(msg?.content, msg?.reasoning_content, msg?.reasoning, out.response);
-    const text =
-      typeof content === "string" ? content : content === undefined ? "" : JSON.stringify(content);
-    if (!text || text === "null") {
+    const { text, inputTokens, outputTokens } = readChatCompletion(raw);
+    if (!text) {
       console.warn("workers-ai unexpected completion shape", JSON.stringify(raw).slice(0, 1200));
       throw new ProviderError(`Workers AI ${this.thinkModel} returned no content`);
     }
@@ -74,8 +57,8 @@ export class WorkersAiProvider implements BrainProvider {
     return {
       text,
       usage: {
-        inputTokens: asInt(out.usage?.prompt_tokens),
-        outputTokens: asInt(out.usage?.completion_tokens),
+        inputTokens,
+        outputTokens,
         model: this.thinkModel,
       },
     };
@@ -100,23 +83,7 @@ export class WorkersAiProvider implements BrainProvider {
   }
 }
 
-function firstText(...candidates: unknown[]): unknown {
-  for (const c of candidates) {
-    if (typeof c === "string" && c.trim().length > 0) return c;
-    if (c !== null && c !== undefined && typeof c === "object") return c;
-  }
-  return undefined;
-}
-
 /** Models whose chat template accepts `enable_thinking` (Workers AI passes chat_template_kwargs through). */
 export function supportsThinkingToggle(model: string): boolean {
   return /qwen3|gemma-4|glm-4/i.test(model);
-}
-
-function isNumberArray(v: unknown): v is number[] {
-  return Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === "number");
-}
-
-function messageOf(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
 }

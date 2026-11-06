@@ -6,7 +6,7 @@ import { ProviderError } from "./types";
 import { WorkersAiProvider } from "./workers-ai";
 import type { AiRunner } from "./workers-ai";
 
-export const DEFAULT_THINK_MODEL = "@cf/qwen/qwen3-30b-a3b-fp8";
+export const DEFAULT_THINK_MODEL = "@cf/google/gemma-4-26b-a4b-it";
 export const DEFAULT_EMBED_MODEL = "@cf/baai/bge-m3";
 export const PROVIDER_IDS = ["workers-ai", "anthropic", "openai-compatible"] as const;
 export type ProviderId = (typeof PROVIDER_IDS)[number];
@@ -27,13 +27,14 @@ export function selectProvider(env: AppEnv, override: string | undefined): Brain
       return new WorkersAiProvider(env.AI as unknown as AiRunner, thinkModel, embedModel);
     }
     case "anthropic":
-      return new AnthropicProvider(env.ANTHROPIC_API_KEY ?? "");
+      // THINK_MODEL / EMBED_MODEL name Workers AI models, so other providers have their own vars.
+      return new AnthropicProvider(env.ANTHROPIC_API_KEY ?? "", env.ANTHROPIC_MODEL || undefined);
     case "openai-compatible":
       return new OpenAiCompatibleProvider(
         env.OPENAI_API_KEY ?? "",
         env.OPENAI_BASE_URL ?? "",
-        "gpt-5-mini",
-        "text-embedding-3-small",
+        env.OPENAI_MODEL || undefined,
+        env.OPENAI_EMBED_MODEL || undefined,
       );
   }
 }
