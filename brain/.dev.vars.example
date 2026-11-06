@@ -3,3 +3,7 @@ EDEN_SHARED_SECRET=change-me-dev
 # ANTHROPIC_API_KEY=
 # OPENAI_API_KEY=
 # OPENAI_BASE_URL=https://api.openai.com/v1
+# Optional model overrides for those providers (THINK_MODEL/EMBED_MODEL are Workers AI only)
+# ANTHROPIC_MODEL=claude-haiku-5-5
+# OPENAI_MODEL=gpt-5-mini
+# OPENAI_EMBED_MODEL=text-embedding-3-small

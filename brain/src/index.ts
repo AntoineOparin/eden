@@ -3,12 +3,16 @@ import type { Context } from "hono";
 import type { ZodType } from "zod";
 import type { AppContext, AppEnv } from "./env";
 import { extractJson, repairPrompt } from "./json-repair";
-import { buildThinkPrompt } from "./prompts";
-import { estimateNeurons } from "./providers/pricing";
+import type { Issue } from "./json-repair";
+import { buildChatPrompt, buildThinkPrompt } from "./prompts";
+import { estimateNeurons, estimateUsd } from "./providers/pricing";
 import { selectProvider } from "./providers/select";
 import { ProviderError } from "./providers/types";
-import type { BrainProvider, ProviderUsage } from "./providers/types";
+import type { BrainProvider, CompletionInput, ProviderUsage } from "./providers/types";
 import {
+  CHAT_OUTPUT_JSON_SCHEMA,
+  chatRequestSchema,
+  chatResponseSchema,
   embedRequestSchema,
   THINK_OUTPUT_JSON_SCHEMA,
   thinkRequestSchema,
@@ -41,6 +45,9 @@ function constantTimeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
+const issuesOf = (e: { issues: ReadonlyArray<{ path: PropertyKey[]; message: string }> }) =>
+  e.issues.map((i): Issue => ({ path: i.path.map(String).join("."), message: i.message }));
+
 async function parseBody<T>(
   c: Context<AppContext>,
   schema: ZodType<T>,
@@ -53,27 +60,82 @@ async function parseBody<T>(
   }
   const parsed = schema.safeParse(json);
   if (!parsed.success) {
-    const issues = parsed.error.issues.map((i) => ({ path: i.path.join("."), message: i.message }));
     return {
       ok: false,
-      res: errorResponse(c, 400, "bad_request", "request failed validation", { issues }),
+      res: errorResponse(c, 400, "bad_request", "request failed validation", {
+        issues: issuesOf(parsed.error),
+      }),
     };
   }
   return { ok: true, data: parsed.data };
 }
 
-function toUsage(u: ProviderUsage): Usage {
-  return {
-    inputTokens: u.inputTokens,
-    outputTokens: u.outputTokens,
-    neurons: estimateNeurons(u),
-    model: u.model,
+/** Wire usage for one route call: tokens summed over every upstream call (all of them are billed). */
+function toUsage(calls: ProviderUsage[]): Usage {
+  const sum: ProviderUsage = {
+    inputTokens: calls.reduce((n, u) => n + u.inputTokens, 0),
+    outputTokens: calls.reduce((n, u) => n + u.outputTokens, 0),
+    model: calls[0]?.model ?? "unknown",
   };
+  return { ...sum, neurons: estimateNeurons(sum) };
 }
 
-function withCostHeaders(c: Context<AppContext>, usage: Usage) {
+/**
+ * Cost headers. X-Eden-Usd-Cost is an addition to the spec's list: it is only sent for models with
+ * a USD price row (providers billed to the player's own key). It is priced per upstream call
+ * because some rates depend on each call's prompt length.
+ */
+function withCostHeaders(c: Context<AppContext>, usage: Usage, calls: ProviderUsage[]) {
   c.header("X-Eden-Neurons-Cost", usage.neurons.toString());
   c.header("X-Eden-Model", usage.model);
+  let usd = 0;
+  for (const call of calls) {
+    const v = estimateUsd(call);
+    if (v === undefined) return;
+    usd += v;
+  }
+  if (calls.length > 0) c.header("X-Eden-Usd-Cost", (Math.round(usd * 1e8) / 1e8).toString());
+}
+
+interface Failed {
+  issues: Issue[];
+  raw: string;
+  calls: ProviderUsage[];
+}
+
+type Validated<T> = ({ ok: true; data: T } | ({ ok: false } & Failed)) & {
+  calls: ProviderUsage[];
+};
+
+/** One completion parsed through `schema`, with exactly one repair retry (AGENTS.md, "Validation"). */
+async function completeValidated<T>(
+  provider: BrainProvider,
+  input: CompletionInput,
+  schema: ZodType<T>,
+): Promise<Validated<T>> {
+  const first = await provider.complete(input);
+  const calls = [first.usage];
+  const parsed = schema.safeParse(extractJson(first.text));
+  if (parsed.success) return { ok: true, data: parsed.data, calls };
+  const second = await provider.complete({
+    ...input,
+    user: `${input.user}\n\n${repairPrompt(first.text, issuesOf(parsed.error))}`,
+  });
+  calls.push(second.usage);
+  const retried = schema.safeParse(extractJson(second.text));
+  if (retried.success) return { ok: true, data: retried.data, calls };
+  return { ok: false, issues: issuesOf(retried.error), raw: second.text, calls };
+}
+
+function invalidOutput(c: Context<AppContext>, failed: Failed) {
+  const u = toUsage(failed.calls);
+  withCostHeaders(c, u, failed.calls);
+  console.warn("invalid model output", JSON.stringify(failed.raw.slice(0, 600)));
+  return errorResponse(c, 422, "invalid_output", "model output failed schema after repair retry", {
+    issues: failed.issues,
+    raw: failed.raw.slice(0, 400),
+    usage: u,
+  });
 }
 
 // ---------- middleware ----------
@@ -117,58 +179,48 @@ app.get("/health", (c) => {
 app.post("/think", async (c) => {
   const body = await parseBody(c, thinkRequestSchema);
   if (!body.ok) return body.res;
-  const provider: BrainProvider = c.get("provider");
   const { system, user } = buildThinkPrompt(body.data);
-  const base = {
-    system,
-    maxTokens: 600,
-    temperature: 0.7,
-    jsonSchema: THINK_OUTPUT_JSON_SCHEMA as unknown as Record<string, unknown>,
-  };
-
-  const first = await provider.complete({ ...base, user });
-  let usage = first.usage;
-  let parsed = thinkResponseSchema.safeParse(extractJson(first.text));
-  if (!parsed.success) {
-    const issues = parsed.error.issues.map((i) => ({ path: i.path.join("."), message: i.message }));
-    const second = await provider.complete({
-      ...base,
-      user: `${user}\n\n${repairPrompt(first.text, issues)}`,
-    });
-    usage = {
-      inputTokens: usage.inputTokens + second.usage.inputTokens,
-      outputTokens: usage.outputTokens + second.usage.outputTokens,
-      model: usage.model,
-    };
-    parsed = thinkResponseSchema.safeParse(extractJson(second.text));
-    if (!parsed.success) {
-      const u = toUsage(usage);
-      withCostHeaders(c, u);
-      console.warn("invalid model output", JSON.stringify(second.text.slice(0, 600)));
-      return errorResponse(
-        c,
-        422,
-        "invalid_output",
-        "model output failed schema after repair retry",
-        {
-          issues: parsed.error.issues.map((i) => ({ path: i.path.join("."), message: i.message })),
-          raw: second.text.slice(0, 400),
-          usage: u,
-        },
-      );
-    }
-  }
-  if (!body.data.allowInvention) parsed.data.invention = null;
-  if (parsed.data.plan.length > body.data.maxGoals)
-    parsed.data.plan = parsed.data.plan.slice(0, body.data.maxGoals);
-  const u = toUsage(usage);
-  withCostHeaders(c, u);
-  return c.json({ response: parsed.data, usage: u });
+  const result = await completeValidated(
+    c.get("provider"),
+    {
+      system,
+      user,
+      maxTokens: 600,
+      temperature: 0.7,
+      jsonSchema: THINK_OUTPUT_JSON_SCHEMA as unknown as Record<string, unknown>,
+    },
+    thinkResponseSchema,
+  );
+  if (!result.ok) return invalidOutput(c, result);
+  const response = result.data;
+  if (!body.data.allowInvention) response.invention = null;
+  if (response.plan.length > body.data.maxGoals)
+    response.plan = response.plan.slice(0, body.data.maxGoals);
+  const u = toUsage(result.calls);
+  withCostHeaders(c, u, result.calls);
+  return c.json({ response, usage: u });
 });
 
 app.post("/chat", async (c) => {
-  // Implemented in M5 (docs/specs/30-brain-worker.md). The schema and prompt builder already exist.
-  return errorResponse(c, 501, "unsupported", "/chat arrives with M5");
+  const body = await parseBody(c, chatRequestSchema);
+  if (!body.ok) return body.res;
+  const { system, user } = buildChatPrompt(body.data);
+  const result = await completeValidated(
+    c.get("provider"),
+    {
+      system,
+      user,
+      // A reply is at most 600 chars plus an optional memory line: ≈ 250 tokens of JSON.
+      maxTokens: 400,
+      temperature: 0.8,
+      jsonSchema: CHAT_OUTPUT_JSON_SCHEMA as unknown as Record<string, unknown>,
+    },
+    chatResponseSchema,
+  );
+  if (!result.ok) return invalidOutput(c, result);
+  const u = toUsage(result.calls);
+  withCostHeaders(c, u, result.calls);
+  return c.json({ response: result.data, usage: u });
 });
 
 app.post("/embed", async (c) => {
@@ -176,8 +228,8 @@ app.post("/embed", async (c) => {
   if (!body.ok) return body.res;
   const provider: BrainProvider = c.get("provider");
   const { vectors, usage } = await provider.embed(body.data.texts);
-  const u = toUsage(usage);
-  withCostHeaders(c, u);
+  const u = toUsage([usage]);
+  withCostHeaders(c, u, [usage]);
   return c.json({
     response: { model: usage.model, dimensions: vectors[0]?.length ?? 0, vectors },
     usage: u,

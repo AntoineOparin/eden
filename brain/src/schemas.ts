@@ -231,3 +231,23 @@ export const THINK_OUTPUT_JSON_SCHEMA = {
     },
   },
 } as const;
+
+/** The JSON Schema handed to the model as response_format for /chat (a subset of chat.schema.json#/$defs/response). */
+export const CHAT_OUTPUT_JSON_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["reply"],
+  properties: {
+    reply: { type: "string", minLength: 1, maxLength: 600 },
+    memory: {
+      type: ["object", "null"],
+      additionalProperties: false,
+      required: ["text", "importance"],
+      properties: {
+        text: { type: "string", maxLength: 280 },
+        importance: { type: "integer", minimum: 1, maximum: 10 },
+      },
+    },
+    mood: { type: ["string", "null"], enum: [...MOODS, null] },
+  },
+} as const;
