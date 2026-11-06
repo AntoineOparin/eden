@@ -24,3 +24,6 @@ brain/.dev.vars
 .vscode/*
 !.vscode/settings.json
 *.log
+
+# Claude Code agent worktrees
+.claude/worktrees/

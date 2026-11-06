@@ -110,6 +110,11 @@ public interface IWorldSnapshot
     /// <summary>Chronicle entries appended since the previous snapshot. Godot drains them each frame.</summary>
     IReadOnlyList<ChronicleEntry> NewChronicle { get; }
 
-    /// <summary>Inspector data; false if the NPC died or never existed.</summary>
+    /// <summary>
+    /// Inspector data. Details are built on request, not for every NPC every snapshot: the first call
+    /// for a living NPC may return false and asks the sim to watch that NPC, and snapshots from the next
+    /// batch on return true. Returns false for dead or unknown ids. Callers poll each frame while a
+    /// panel is open; the sim keeps a bounded watch list (32 in M1).
+    /// </summary>
     bool TryGetNpcDetail(int npcId, out NpcDetail detail);
 }

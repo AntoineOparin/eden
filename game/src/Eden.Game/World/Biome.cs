@@ -1,8 +1,8 @@
 namespace Eden.Game;
 
 /// <summary>
-/// Biome ids as the renderer interprets <c>IWorldSnapshot.Biomes</c>. The contracts do not define
-/// biome ids yet; until they do, this table is the client's assumption and the FakeSimHost uses it.
+/// Biome ids as the renderer interprets <c>IWorldSnapshot.Biomes</c>. Values mirror
+/// <c>Eden.Sim.Contracts.BiomeId</c> (the contract); keep them identical.
 /// </summary>
 public static class Biome
 {
