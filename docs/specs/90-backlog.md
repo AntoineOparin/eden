@@ -30,9 +30,9 @@ item; remove it from here in the same PR that resolves it. Last updated 2026-11-
 
 | Item | Belongs to | Note |
 |---|---|---|
-| Trees, stone, berries not drawn | M3 render pass or M4 | `IWorldSnapshot` has no resource-node field. Add a `ResourceView` list to the contract (PR note required); Eden.Sim already has `ResourceNodes` internally. |
-| Buildings not drawn | M3 | `BuildingView` exists in the contract; the sim does not emit buildings until M3. |
-| Hi-LOD NPC is a code-built capsule, no skinned glTF / `AnimationTree` | M6 | Kenney/Quaternius CC0 packs as planned. Pool and slot logic are done. |
+| Trees, stone, berries not drawn | A1 art pass (`45-art-pass.md`) | `IWorldSnapshot` has no resource-node field. Add a `ResourceView` list to the contract (PR note required); Eden.Sim already has `ResourceNodes` internally. |
+| Buildings not drawn | A1 art pass | `BuildingView` exists in the contract; the sim does not emit buildings until M3. |
+| Hi-LOD NPC is a code-built capsule, no skinned glTF / `AnimationTree` | A1 art pass | Kenney/Quaternius CC0 packs as planned. Pool and slot logic are done. |
 | No per-chunk `NavigationRegion3D` baking | M6 | Only the possessed `CharacterBody3D` needs navigation; the sim never does. |
 | Settlement panel, Chronicle timeline, the other god powers (spawn, rain/drought, terraform, bless/curse, drop item) | M7 | M5 shipped the toolbar with Select / Lightning / Whisper, the brain settings panel, the budget meter and the dialogue panel. All other power commands already have sim handlers. |
 | `FakeSimHost` stays under `src/Eden.Game/Dev/` | keep | Useful for perf runs; `--fake-sim --npcs=N --log-fps --screenshot=PATH --quit-after=S` are the CLI flags. |
@@ -58,5 +58,5 @@ item; remove it from here in the same PR that resolves it. Last updated 2026-11-
 
 | Item | Belongs to | Note |
 |---|---|---|
-| `ResourceView` for trees/stone/berries in `IWorldSnapshot` | M3 render pass | See Eden.Game above. |
+| `ResourceView` for trees/stone/berries in `IWorldSnapshot` | A1 art pass (pre-approved) | See Eden.Game above. |
 | Save-format version bump rules | M8 | `SaveWriter` sections are tagged and versioned; write the compatibility policy down when the first breaking change happens. |
