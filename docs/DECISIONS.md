@@ -518,3 +518,93 @@ Possession is never saved: the save writes "nobody" and a load releases.
 small additive Mind method (the Spotlight already excluded the possessed NPC, no change there).
 **Evidence.** `PossessionTests` (both projects), `PossessedDialogueTests`.
 **Revisit when.** More verbs (trade, court) or a radial menu.
+
+## 2026-11-07 — M8: tick work keeps every hash; allocation left only where memories are made
+**Decision.** The scale pass changes how the tick computes, not what it computes. Changes: the nearest-NPC search is
+memoized inside one decision (talk, teach and learn asked for it three times); searches reject far candidates with a
+squared-distance test whose margin is far above float rounding before the exact distance; `FindCraft` searches each
+resource kind once; `FindHungryDependent` walks the adult's kin (a per-tick index: parent id → children) instead of
+everyone within 96 m, keeps the scan's filters (including "its grid bin was in the search square at tick start") and
+breaks distance ties in grid-scan order (bin, then slot); hot knowledge loops read per-NPC proficiency rows by concept
+index (a mirror of the dictionaries, which stay the source of truth for saves, hash, inspector and Mind; rows are
+rebuilt when the graph grows or a load happens). Allocation: concept names lower-cased once per node, index loops
+instead of `foreach` over `IReadOnlyList` (boxed enumerators), memory streams and knowledge dictionaries sized once
+per slot (500 + 1 and graph size), `Relationships.Forget` removes while enumerating. Event payloads were not pooled:
+what still allocates on the tick is the `Memory`, its text and its subject array for gossip retellings, first lessons
+and beliefs, which are saved state, so a pool would only move the allocation.
+**Why.** The brief asked for unchanged hashes unless deliberate. Each step was checked with `--seeds 1..20 --years 120`
+(state hash column added to the sweep): identical to phase5-base for the tick changes, identical to the previous
+commit for the kin index. **Evidence.** STATUS M8 table: 5,000 NPCs 6.4–6.6 → 3.2 ms/tick, 8.8 → 3.4 KB/tick.
+**Revisit when.** Memory text becomes lazy (template + arguments), which would remove most of what is left.
+
+## 2026-11-07 — M8: building sites prefer flat ground and finished buildings level it (deliberate hash change)
+**Decision.** `TryPlaceNear` (storehouses, farm plots, wells, shrines) and `PickHomeSite` (where a hut will stand)
+evaluate all their random candidates and take the flattest acceptable one (`Terrain.SlopeUnder` = height range of the
+cells under the footprint ÷ its diameter; ties go to the earliest) instead of the first acceptable one. It is a
+preference, not a limit: a first version that also refused candidates steeper than 0.6 left seed 5 with one village of
+300 people at year 120 (its homes fell back to the village centre), so the cap was dropped. A finished building (not a
+dock) pulls the land under its footprint halfway to the footprint's mean height, fading over one cell outside it; land
+never drops below sea level + 0.05 m, so walkable regions and the water field cannot change and only the touched cells'
+biome, fertility and move cost are recomputed. The snapshot's heightmap is refreshed once per in-game year after such
+changes (the renderer rebuilds every terrain chunk when the heightmap instance changes).
+**Why.** Backlog row: placement and pathing should agree with A1's render foundations. **Evidence.** Seed 20, year 120:
+state hash B52D5CFBBF4259B0 → A6629BBF134DFAAC (population 1,442 → 1,617). Sweep 1..20 × 120 years, 18 living seeds,
+medians before → after: population 1,319 → 1,341, peak 1,485 → 1,635, year reaching 50 people 42.5 → 42.5, settlements
+founded 12 → 11.5, trades 309 → 334, raids 83 → 115 (raids vary 0–200 per seed in both). Seeds 10 and 16 still die out.
+Slow tests pass (`BuildingSiteTests`, Population, Society, Pacing). The opt-in full pacing band does not: over 500 years
+median bronze moves from year 408 to 479 (band 300–450), one seed fewer casting bronze by year 450; writing stays in
+band (200 → 198). Accepted as trajectory noise on an already bimodal era rather than retuned here (backlog row).
+**Revisit when.** TerrainBuilder can rebuild only
+the chunks under changed cells (backlog); then the snapshot could refresh on every completion.
+
+## 2026-11-07 — M8: save format version 2 (memory table, Brotli) and the version policy
+**Decision.** Format version 2 adds a flags byte to each section header (bit 0 = Brotli; then the raw length) and
+compresses sections of 4 KB or more with Brotli quality 1, window 22 (`System.IO.Compression`, in the BCL). `MEMS` goes
+to section version 2: a table of distinct memories (same object, or equal in every saved field) and per-NPC varint
+indices; a load shares one object per entry again, as the running world does. Other sections keep their layout. The
+header gains `conceptSet`. Loads are all or nothing: the body is read into a scratch world first, and only a body that
+loaded cleanly is read into the live world (two reads, ~0.15 s each at year 120); every section length is checked
+against the bytes left and counts inside `MEMS` are bounded. Version policy in `10-sim-core.md` "Save format and
+versions": the format version bumps for framing changes only, a section version for layout changes inside it, readers
+keep old read paths (`ReadVersion1`), unknown tags are skipped, and a fixture of the previous format is kept with a test.
+**Why.** 16.2 of the 21 MB of a year-120 save was memory text written once per witness. Varint ids alone or dropping
+empty sections would have saved little (no section is empty in a grown world). Save and load were already fast (0.06 s
+/ 0.10 s in memory); the 101 s the brief quoted was the `--year=120` fast-forward. **Evidence.** Seed 20 year 120:
+20.65 MB → 3.73 MB (same world loaded from the v1 file), 5,000 NPCs: 117.8 MB → 10.6 MB; save 0.06 → 0.10 s, load
+0.10 → 0.10 s in memory (file load 0.20 → 0.15 s). `SaveFormatTests` (v1 fixture, truncation at nine offsets, damaged
+Brotli body, unknown section, newer section and format versions, sharing). **Revisit when.** A section needs random
+access (then compress per chunk).
+
+## 2026-11-07 — M8: data override folder (roadmap item 5)
+**Decision.** `SimConfig.DataOverrideDir` (string, default null) and `KnowledgeData.FromDirectory`: any of the four
+data files found in the folder replaces the shipped one, the rest fall back to the embedded copies, and the set goes
+through the same parser and `ConceptGraph.Load` checks as the shipped data; any failure throws `InvalidDataException`
+starting "data override <dir>:". The world uses it at creation; a save keeps the folder in `CONF` and its set hash in
+the header; a load re-reads the folder for concept tags and falls back to the shipped data with a log line if it is
+gone (concept definitions are in the save anyway). Eden.Game: `Dev/DataOverride.cs`, called from one line in
+`Main._Ready`, passes `OS.GetUserDataDir()/data` when it exists and pushes an error and uses the shipped data when the
+set is bad, so a broken mod cannot stop the game from booting.
+**Why.** The roadmap item. The JSON schema in `contracts/` is checked by node at build time; the C# parser plus graph
+checks are what the game can run, and they catch every problem the schema does that matters to the sim (missing fields
+throw, unknown effect types throw, references and cycles are checked). **Evidence.** `DataOverrideTests` (5).
+**Revisit when.** Mods need hot reload or several folders.
+
+## 2026-11-07 — M8: export (templates, assets through a staging copy, ad-hoc signing)
+**Decision.** `game/export_presets.cfg` has a macOS preset (universal binary: the 4.7.2 template ships only
+`godot_macos_*.universal`; `codesign/codesign=1` built-in ad-hoc, notarization off, bundle id `dev.eden.game`) and a
+Linux x86_64 preset; include filter `assets/*, data/*`. `rendering/textures/vram_compression/import_etc2_astc=true` is
+set in `project.godot` because the exporter refuses arm64/universal without it. Godot's exporter does not look inside
+`.gdignore`'d folders even for the non-resource include filter (the first export's PCK was 215 KB, no assets), so
+`game/tools/export/export.sh` exports from a staging copy (`build/stage/`, with `docs/specs/contracts` beside it for
+the linked contract sources) where `assets/.gdignore` is removed and every asset gets an `importer="keep"` `.import`
+file: the files are packed as they are at the same `res://` paths, and the repository copy is untouched. Templates:
+`https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_mono_export_templates.tpz`,
+1,202,598,411 bytes (SHA-256 92f8681e349ef1f90891b792da95e3b2b0bd1ed610b78018c58feb2d87e15a9d), free; only
+`macos.zip`, `linux_{debug,release}.x86_64`, `icudt_godot.dat` and `version.txt` were installed into
+`~/Library/Application Support/Godot/export_templates/4.7.2.stable.mono/`. The app is unsigned beyond Godot's ad-hoc
+signature (runs locally; Gatekeeper would block it if downloaded); no paid or Apple Developer step was taken.
+**Why.** The A1 assets are loaded at runtime by A2's code, which this pass may not change; the staging copy needs no
+code change and no import of the GLBs. The Godot docs pages for .NET export and command-line export were 404 for 4.7
+on the day; the general export and macOS pages were followed. **Evidence.** STATUS M8: exported app boots, prints
+"Eden boot ok", loads a seed-20 year-120 save and draws the real assets (screenshot), 11.5 MB PCK, 347 MB app.
+**Revisit when.** Assets move to imported resources, or the game is distributed (needs a Developer ID and notarization).

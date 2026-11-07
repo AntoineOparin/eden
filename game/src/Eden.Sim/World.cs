@@ -102,6 +102,12 @@ public sealed partial class World
     {
         float food = Weather switch { WeatherKind.Rain => 1.5f, WeatherKind.Drought => 0.3f, _ => 1f };
         Resources.RegenDay(food);
+        if (_heightsChangedByBuildings && Clock.DayOfYear == 0)
+        {
+            _heightsChangedByBuildings = false; // M8: the renderer sees foundation flattening once a year
+            _publishedHeights = null;
+            _publishedBiomes = null;
+        }
         if (Weather != WeatherKind.Clear && Tick >= WeatherUntil)
         {
             Weather = WeatherKind.Clear;

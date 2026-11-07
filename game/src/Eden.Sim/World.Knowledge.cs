@@ -38,7 +38,8 @@ public sealed partial class World
     /// <summary>World constructor: load the shipped graph (parsed once per process) into this world.</summary>
     private void InitKnowledge()
     {
-        Graph = ConceptGraph.Load();
+        Graph = ConceptGraph.Load(KnowledgeData.For(Config)); // M8: honours SimConfig.DataOverrideDir
+        ResetProfRows();
         _concepts.Clear();
         foreach (var n in Graph.Nodes) _concepts[n.Id] = n.Concept;
     }
@@ -71,7 +72,7 @@ public sealed partial class World
                 if (!k.TryGetValue(node.Id, out float p) || p <= 0) continue;
                 Graph.AddHolder(i, -1);
                 if (!Graph.KnownAnywhere(i))
-                    Chronicle(Tick, "knowledge-lost", $"With {Npcs.Name[s]} died the last knowledge of {Lower(node.Name)}.", 6, [Npcs.IdOf(s)]);
+                    Chronicle(Tick, "knowledge-lost", $"With {Npcs.Name[s]} died the last knowledge of {node.LowerName}.", 6, [Npcs.IdOf(s)]);
             }
         }
         KnowledgeState.ResetSlot(s);
@@ -260,7 +261,7 @@ public sealed partial class World
             if (!Graph.TryIndex(id, out int i)) continue;
             Graph.SetRecorded(i, Records.Holding(id));
             if (!Graph.KnownAnywhere(i))
-                Chronicle(Tick, "knowledge-lost", $"The records of {Lower(Graph[i].Name)} were destroyed; no one remembers it.", 6, Array.Empty<int>());
+                Chronicle(Tick, "knowledge-lost", $"The records of {Graph[i].LowerName} were destroyed; no one remembers it.", 6, Array.Empty<int>());
         }
         return true;
     }
@@ -278,21 +279,57 @@ public sealed partial class World
 
     private static bool Has(uint mask, ActionKind a) => (mask & (1u << (int)a)) != 0;
 
-    private static string Lower(string name) => name.Length == 0 ? name : char.ToLowerInvariant(name[0]) + name[1..];
 
     private Dictionary<string, float>? KnowledgeOf(int s) => s < _knowledge.Length ? _knowledge[s] : null;
 
     private static float Prof(Dictionary<string, float>? k, string id) => k is not null && k.TryGetValue(id, out float p) ? p : 0f;
 
+    // ---- M8: proficiency rows by concept index ------------------------------------------------
+    // A mirror of _knowledge for the hot loops (lessons, chatter, apprenticeship, discovery, honing) that walk every
+    // concept: one array read instead of a string-hashed dictionary lookup. The dictionaries stay the source of truth
+    // (saves, hash, inspector, Mind). A row is valid while its length equals Graph.Count; every write to a dictionary
+    // goes through SetProficiency / SetKnowledge / ClearKnowledgeOf, which keep a valid row in step, and an invalid
+    // row (new slot, a graph that grew, a load) is rebuilt from the dictionary on first use. Values are copies of the
+    // same floats, so results are bit-identical.
+    private float[]?[] _profRows = new float[]?[64];
+
+    private float[] ProfRow(int s)
+    {
+        if (s >= _profRows.Length) Array.Resize(ref _profRows, Math.Max(s + 1, _profRows.Length * 2));
+        int n = Graph.Count;
+        var row = _profRows[s];
+        if (row is not null && row.Length == n) return row;
+        row = _profRows[s] = new float[n]; // once per slot, and again only if the graph grows
+        var k = KnowledgeOf(s);
+        if (k is not null)
+            for (int i = 0; i < n; i++) row[i] = Prof(k, Graph[i].Id);
+        return row;
+    }
+
+    private void MirrorProf(int s, int i, float value)
+    {
+        if (s < _profRows.Length && _profRows[s] is { } row && row.Length == Graph.Count) row[i] = value;
+    }
+
+    /// <summary>Forget everything a slot knew (death, or a slot reused by a birth or a spawn).</summary>
+    private void ClearKnowledgeOf(int s)
+    {
+        if (s < _knowledge.Length) _knowledge[s]?.Clear();
+        if (s < _profRows.Length && _profRows[s] is { } row) Array.Clear(row);
+    }
+
+    private void ResetProfRows() => _profRows = new float[]?[Math.Max(64, _knowledge.Length)];
+
     /// <summary>Fast path for sim code: set a proficiency by concept index and keep the bookkeeping.</summary>
     private void SetProficiency(int s, int i, float value)
     {
         EnsureKnowledgeSlot(s);
-        var k = _knowledge[s] ??= new Dictionary<string, float>(StringComparer.Ordinal);
+        var k = _knowledge[s] ??= new Dictionary<string, float>(Graph.Count, StringComparer.Ordinal); // sized once: no rehash on the tick path
         string id = Graph[i].Id;
         k.TryGetValue(id, out float before);
         float after = Math.Clamp(value, 0f, 1f);
         k[id] = after;
+        MirrorProf(s, i, after);
         if (_knowledgeLoading) return;
         if (after > before) KnowledgeState.Touch(s, i, Graph.Count, Tick);
         Bookkeep(s, i, before, after);
@@ -314,7 +351,7 @@ public sealed partial class World
         if (value <= before) return;
         SetProficiency(s, i, value);
         if (before > 0 || StageOf(s) == LifeStage.Infant) return;
-        string concept = Lower(Graph[i].Name);
+        string concept = Graph[i].LowerName;
         if (fromSlot >= 0)
         {
             int[] subjects = [Npcs.IdOf(fromSlot), Npcs.IdOf(s)];
@@ -329,10 +366,12 @@ public sealed partial class World
         if (k is null || k.Count == 0) return;
         var list = Graph.HonedBy(action);
         float rate = Config.HoneRate;
+        var row = ProfRow(s);
         for (int j = 0; j < list.Length; j++)
         {
             int i = list[j];
-            if (!k.TryGetValue(Graph[i].Id, out float p) || p <= 0) continue;
+            float p = row[i];
+            if (p <= 0) continue;
             KnowledgeState.Touch(s, i, Graph.Count, Tick);
             if (p < 1f) SetProficiency(s, i, KnowledgeRules.Hone(p, rate));
         }
@@ -351,15 +390,15 @@ public sealed partial class World
         if (StageOf(listener) == LifeStage.Infant) return;
         var ks = KnowledgeOf(speaker);
         if (ks is null || ks.Count == 0 || Graph.Count == 0) return;
-        var kl = KnowledgeOf(listener);
+        var rs = ProfRow(speaker);
+        var rl = ProfRow(listener);
         int start = Rng.NextInt(Graph.Count);
         for (int j = 0; j < Graph.Count; j++)
         {
             int i = (start + j) % Graph.Count;
-            string id = Graph[i].Id;
-            float sp = Prof(ks, id);
+            float sp = rs[i];
             if (sp < Config.UnlockProficiency) continue;
-            float lp = Prof(kl, id);
+            float lp = rl[i];
             if (lp >= sp - 0.1f) continue;
             Gain(listener, i, KnowledgeRules.Transfer(lp, sp, Config.ChatterRate), speaker, "told");
             Practise(speaker, i, sp);
@@ -397,15 +436,15 @@ public sealed partial class World
         concept = -1;
         var kt = KnowledgeOf(teacher);
         if (kt is null || kt.Count == 0) return false;
-        var kp = KnowledgeOf(pupil);
+        var rt = ProfRow(teacher);
+        var rp = ProfRow(pupil);
         int count = Graph.Count;
         int start = (int)((Tick / Config.DecisionIntervalTicks + teacher) % count);
         for (int j = 0; j < count; j++)
         {
             int i = (start + j) % count;
-            string id = Graph[i].Id;
-            float tp = Prof(kt, id);
-            if (tp < Config.TeachMinProficiency || Prof(kp, id) > tp - 0.2f) continue;
+            float tp = rt[i];
+            if (tp < Config.TeachMinProficiency || rp[i] > tp - 0.2f) continue;
             concept = i;
             return true;
         }
@@ -417,13 +456,17 @@ public sealed partial class World
         var ks = KnowledgeState;
         tool = node = -1;
         ulong want = ks.Craftable[s] & ~ks.Owned[s];
+        // M8: FindNearest is pure within a call, so search each resource kind at most once (tools share materials).
+        Span<int> nearest = stackalloc int[8];
+        nearest.Fill(-2);
         while (want != 0)
         {
             int t = System.Numerics.BitOperations.TrailingZeroCount(want);
             want &= want - 1;
             var def = Graph.Tools[t];
             if (def.Materials.Count == 0 || !ConceptGraph.TryParseResourceKind(def.Materials[0], out var kind)) continue;
-            int found = Resources.FindNearest(kind, Npcs.X[s], Npcs.Z[s], Config.SearchRadius, 1f, Npcs.AvoidNode[s], reachable: true);
+            ref int found = ref nearest[(int)kind];
+            if (found == -2) found = Resources.FindNearest(kind, Npcs.X[s], Npcs.Z[s], Config.SearchRadius, 1f, Npcs.AvoidNode[s], reachable: true);
             if (found < 0) continue;
             tool = t;
             node = found;
@@ -445,13 +488,12 @@ public sealed partial class World
 
     // ---- discovery --------------------------------------------------------------------------
 
-    private bool Eligible(Dictionary<string, float>? k, int i, float threshold)
+    private bool Eligible(float[] row, int i, float threshold)
     {
-        var node = Graph[i];
-        if (Prof(k, node.Id) > 0) return false;
-        var pre = node.Prereqs;
+        if (row[i] > 0) return false;
+        var pre = Graph[i].Prereqs;
         for (int j = 0; j < pre.Length; j++)
-            if (Prof(k, Graph[pre[j]].Id) < threshold) return false;
+            if (row[pre[j]] < threshold) return false;
         return true;
     }
 
@@ -464,7 +506,7 @@ public sealed partial class World
     {
         var cfg = Config;
         if (cfg.DiscoveryRate <= 0) return;
-        var k = KnowledgeOf(s);
+        var k = ProfRow(s);
         float th = cfg.DiscoveryThreshold;
         float total = 0;
         int eligible = 0;
@@ -499,7 +541,7 @@ public sealed partial class World
         bool rediscovered = !first && !Graph.KnownAnywhere(i);
         SetProficiency(s, i, Math.Max(Proficiency(s, node.Id), Config.DiscoveredProficiency));
         KnowledgeState.Candidates[s] = (short)Math.Max(0, KnowledgeState.Candidates[s] - 1);
-        string who = Npcs.Name[s], what = Lower(node.Name);
+        string who = Npcs.Name[s], what = node.LowerName;
         string text = first ? $"{who} discovered {what}." : rediscovered ? $"{who} rediscovered {what}, which had been lost." : $"{who} worked out {what} alone.";
         bool news = first || rediscovered;
         Events.Publish(new SimEvent(Tick, MemoryKind.Discovery, text, news ? 7 : 5, [Npcs.IdOf(s)],
@@ -561,7 +603,7 @@ public sealed partial class World
             if (next > 0) continue;
             last[i] = -1;
             if (!Graph.KnownAnywhere(i))
-                Chronicle(Tick, "knowledge-lost", $"{Npcs.Name[s]} forgot {Lower(Graph[i].Name)}, and no one else remembered it.", 6, [Npcs.IdOf(s)]);
+                Chronicle(Tick, "knowledge-lost", $"{Npcs.Name[s]} forgot {Graph[i].LowerName}, and no one else remembered it.", 6, [Npcs.IdOf(s)]);
         }
     }
 
@@ -587,12 +629,13 @@ public sealed partial class World
         if (kp is null || kp.Count == 0) return;
         float rate = Config.ApprenticeRatePerDay * (0.5f + Npcs.Gene(child, Gene.Curiosity));
         if (Prof(kp, ApprenticeshipId) >= Config.UnlockProficiency) rate *= 2f;
+        var rp = ProfRow(parent);
+        var rc = ProfRow(child);
         for (int i = 0; i < Graph.Count; i++)
         {
-            string id = Graph[i].Id;
-            float target = Prof(kp, id) * 0.9f;
+            float target = rp[i] * 0.9f;
             if (target <= 0) continue;
-            float cp = Prof(KnowledgeOf(child), id);
+            float cp = rc[i];
             if (cp >= target) continue;
             Gain(child, i, KnowledgeRules.Transfer(cp, target, rate), parent, "showed");
         }
@@ -706,10 +749,32 @@ public sealed partial class World
         }
     }
 
+    /// <summary>
+    /// The data set to reattach tags from after a load: the saved config's override folder when it still loads, else the
+    /// shipped data (logged). Concept definitions themselves come from the save, so the world stays consistent either way.
+    /// </summary>
+    private KnowledgeData LoadedKnowledgeData()
+    {
+        if (Config.DataOverrideDir is not { Length: > 0 }) return KnowledgeData.Default;
+        try { return KnowledgeData.For(Config); }
+        catch (InvalidDataException e)
+        {
+            AddLog($"load: {e.Message}; using the shipped data for concept tags");
+            return KnowledgeData.Default;
+        }
+    }
+
+    /// <summary>After a load: log when the save was made with a different concept set than this world now uses.</summary>
+    internal void NoteLoadedConceptSet(string? saved)
+    {
+        if (saved is not null && saved != Graph.Data.SetHash)
+            AddLog($"load: the save was made with concept set {saved}; this world uses {Graph.Data.SetHash}");
+    }
+
     /// <summary>ReadBody, after every section: rebuild the graph in saved order, then the derived counters and masks.</summary>
     private void EndKnowledgeLoad(byte[]? section)
     {
-        var data = KnowledgeData.Default;
+        var data = LoadedKnowledgeData();
         var ordered = new List<(ConceptProposal, bool)>();
         var ever = new HashSet<string>(StringComparer.Ordinal);
         var ks = KnowledgeState;
@@ -772,6 +837,7 @@ public sealed partial class World
         }
 
         Graph = ConceptGraph.FromSaved(data, ordered);
+        ResetProfRows(); // M8: indices may differ from the graph the rows were built for
         _concepts.Clear();
         foreach (var node in Graph.Nodes) _concepts[node.Id] = node.Concept;
         foreach (var (slot, tool) in ownedTools)

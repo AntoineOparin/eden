@@ -96,7 +96,8 @@ public sealed class MemoryStore
     public void Add(int slot, Memory m, long now)
     {
         Ensure(slot);
-        var list = _streams[slot] ??= new List<Memory>(16);
+        // Full capacity up front (once per slot; Reset keeps the list): growing 16 → 1,024 cost an array copy per doubling.
+        var list = _streams[slot] ??= new List<Memory>(_cap + 1);
         list.Add(m);
         if (m.Importance >= DramaImportance && m.Tick + 1 > _drama[slot]) _drama[slot] = m.Tick + 1;
         NoteGod(slot, m);
@@ -205,61 +206,159 @@ public sealed class MemoryStore
         return h;
     }
 
+    /// <summary>
+    /// MEMS section version 2 (M8): a table of distinct memories, then per living NPC its stream as table indices.
+    /// One event is remembered by every witness as the same <see cref="Memory"/> object, and version 1 wrote its text
+    /// once per holder (16 of the 21 MB of a year-120 save). Memories are merged when they are the same object or equal
+    /// in every saved field (a version-1 load had split them), and a load shares one object per table entry again.
+    /// Integers are 7-bit varints; subject ids are zigzag varints (the god is -2).
+    /// </summary>
+    public const short SectionVersion = 2;
+
     public void Write(BinaryWriter w, Npcs npcs)
     {
+        var table = new List<Memory>();
+        var index = new Dictionary<Memory, int>(SavedFieldsComparer.Instance);
+        var streams = new List<int>();
         for (int s = 0; s < npcs.HighWater; s++)
         {
             if (!npcs.Alive[s]) continue;
             var list = Of(s);
-            w.Write(list.Count);
+            streams.Add(list.Count);
             foreach (var m in list)
             {
-                w.Write(m.Tick);
-                w.Write((byte)m.Kind);
-                w.Write((byte)m.Importance);
-                w.Write(m.Text);
-                w.Write(m.Subjects.Length);
-                foreach (int id in m.Subjects) w.Write(id);
-                w.Write(m.Embedding?.Length ?? -1);
-                if (m.Embedding is { } e) foreach (float f in e) w.Write(f);
+                if (!index.TryGetValue(m, out int i)) { i = table.Count; index.Add(m, i); table.Add(m); }
+                streams.Add(i);
             }
-            for (int k = 0; k < KindCount; k++) w.Write(s < _streams.Length ? _evicted[s * KindCount + k] : 0);
+        }
+        w.Write7BitEncodedInt(table.Count);
+        foreach (var m in table)
+        {
+            w.Write7BitEncodedInt64(m.Tick);
+            w.Write((byte)m.Kind);
+            w.Write((byte)m.Importance);
+            w.Write(m.Text);
+            w.Write7BitEncodedInt(m.Subjects.Length);
+            foreach (int id in m.Subjects) w.Write7BitEncodedInt((id << 1) ^ (id >> 31));
+            w.Write7BitEncodedInt((m.Embedding?.Length ?? -1) + 1);
+            if (m.Embedding is { } e) foreach (float f in e) w.Write(f);
+        }
+        int p = 0;
+        for (int s = 0; s < npcs.HighWater; s++)
+        {
+            if (!npcs.Alive[s]) continue;
+            int count = streams[p++];
+            w.Write7BitEncodedInt(count);
+            for (int i = 0; i < count; i++) w.Write7BitEncodedInt(streams[p++]);
+            for (int k = 0; k < KindCount; k++) w.Write7BitEncodedInt(s < _streams.Length ? _evicted[s * KindCount + k] : 0);
         }
     }
 
-    public void Read(BinaryReader r, Npcs npcs)
+    public void Read(BinaryReader r, Npcs npcs, short version = SectionVersion)
     {
+        if (version > SectionVersion) throw new InvalidDataException($"MEMS section version {version} is newer than this build");
         _streams = new List<Memory>?[Math.Max(64, npcs.Capacity)];
         _evicted = new int[_streams.Length * KindCount];
         _drama = new long[_streams.Length];
         _faith = new long[_streams.Length];
         _godSeen = new long[_streams.Length];
+        if (version < 2) { ReadVersion1(r, npcs); return; }
+        long remaining = r.BaseStream.Length - r.BaseStream.Position;
+        int unique = r.Read7BitEncodedInt();
+        if (unique < 0 || unique > remaining) throw new InvalidDataException("MEMS: bad memory count");
+        var table = new Memory[unique];
+        for (int i = 0; i < unique; i++)
+        {
+            long tick = r.Read7BitEncodedInt64();
+            var kind = (MemoryKind)r.ReadByte();
+            int importance = r.ReadByte();
+            string text = r.ReadString();
+            int ns = r.Read7BitEncodedInt();
+            if (ns < 0 || ns > 1 << 16) throw new InvalidDataException("MEMS: bad subject count");
+            var subjects = ns == 0 ? Array.Empty<int>() : new int[ns];
+            for (int j = 0; j < ns; j++) { uint z = (uint)r.Read7BitEncodedInt(); subjects[j] = (int)(z >> 1) ^ -(int)(z & 1); }
+            var m = new Memory(tick, kind, subjects, text, importance);
+            int el = r.Read7BitEncodedInt() - 1;
+            if (el > 1 << 16) throw new InvalidDataException("MEMS: bad embedding length");
+            if (el >= 0)
+            {
+                var e = new float[el];
+                for (int j = 0; j < el; j++) e[j] = r.ReadSingle();
+                m.Embedding = e;
+            }
+            table[i] = m;
+        }
+        for (int s = 0; s < npcs.HighWater; s++)
+        {
+            if (!npcs.Alive[s]) continue;
+            int n = r.Read7BitEncodedInt();
+            if (n < 0 || n > Math.Max(_cap, 1) * 4) throw new InvalidDataException("MEMS: bad stream length");
+            var list = _streams[s] = new List<Memory>(Math.Max(_cap + 1, n));
+            for (int i = 0; i < n; i++)
+            {
+                int at = r.Read7BitEncodedInt();
+                if ((uint)at >= (uint)table.Length) throw new InvalidDataException("MEMS: bad memory index");
+                AddLoaded(s, list, table[at]);
+            }
+            for (int k = 0; k < KindCount; k++) _evicted[s * KindCount + k] = r.Read7BitEncodedInt();
+        }
+    }
+
+    private void ReadVersion1(BinaryReader r, Npcs npcs)
+    {
         for (int s = 0; s < npcs.HighWater; s++)
         {
             if (!npcs.Alive[s]) continue;
             int n = r.ReadInt32();
-            var list = _streams[s] = new List<Memory>(Math.Max(16, n));
+            if (n < 0 || n > Math.Max(_cap, 1) * 4) throw new InvalidDataException("MEMS: bad stream length");
+            var list = _streams[s] = new List<Memory>(Math.Max(_cap + 1, n));
             for (int i = 0; i < n; i++)
             {
                 long tick = r.ReadInt64();
                 var kind = (MemoryKind)r.ReadByte();
                 int importance = r.ReadByte();
                 string text = r.ReadString();
-                var subjects = new int[r.ReadInt32()];
+                int ns = r.ReadInt32();
+                if (ns < 0 || ns > 1 << 16) throw new InvalidDataException("MEMS: bad subject count");
+                var subjects = new int[ns];
                 for (int j = 0; j < subjects.Length; j++) subjects[j] = r.ReadInt32();
                 var m = new Memory(tick, kind, subjects, text, importance);
                 int el = r.ReadInt32();
+                if (el > 1 << 16) throw new InvalidDataException("MEMS: bad embedding length");
                 if (el >= 0)
                 {
                     var e = new float[el];
                     for (int j = 0; j < el; j++) e[j] = r.ReadSingle();
                     m.Embedding = e;
                 }
-                list.Add(m);
-                if (m.Importance >= DramaImportance && m.Tick + 1 > _drama[s]) _drama[s] = m.Tick + 1;
-                NoteGod(s, m);
+                AddLoaded(s, list, m);
             }
             for (int k = 0; k < KindCount; k++) _evicted[s * KindCount + k] = r.ReadInt32();
         }
+    }
+
+    private void AddLoaded(int s, List<Memory> list, Memory m)
+    {
+        list.Add(m);
+        if (m.Importance >= DramaImportance && m.Tick + 1 > _drama[s]) _drama[s] = m.Tick + 1;
+        NoteGod(s, m);
+    }
+
+    /// <summary>Equality over every field the save keeps (and the MYTH section's generation and distortion).</summary>
+    private sealed class SavedFieldsComparer : IEqualityComparer<Memory>
+    {
+        public static readonly SavedFieldsComparer Instance = new();
+
+        public bool Equals(Memory? a, Memory? b)
+        {
+            if (ReferenceEquals(a, b)) return true;
+            if (a is null || b is null) return false;
+            return a.Tick == b.Tick && a.Kind == b.Kind && a.Importance == b.Importance && a.Generation == b.Generation
+                && a.Distortion == b.Distortion && a.Text == b.Text && a.Subjects.AsSpan().SequenceEqual(b.Subjects)
+                && (ReferenceEquals(a.Embedding, b.Embedding)
+                    || (a.Embedding is { } ea && b.Embedding is { } eb && ea.AsSpan().SequenceEqual(eb)));
+        }
+
+        public int GetHashCode(Memory m) => HashCode.Combine(m.Tick, m.Text, m.Kind, m.Subjects.Length);
     }
 }

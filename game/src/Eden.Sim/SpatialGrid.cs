@@ -10,6 +10,7 @@ public sealed class SpatialGrid
     private readonly int _binsX, _binsZ;
     private readonly int[] _head;
     private int[] _next = [];
+    private int[] _bin = [];
 
     public SpatialGrid(float worldWidth, float worldDepth, float binSize)
     {
@@ -21,12 +22,13 @@ public sealed class SpatialGrid
 
     public void Rebuild(Npcs npcs)
     {
-        if (_next.Length < npcs.Capacity) _next = new int[npcs.Capacity];
+        if (_next.Length < npcs.Capacity) { _next = new int[npcs.Capacity]; _bin = new int[npcs.Capacity]; }
         Array.Fill(_head, -1);
         for (int s = npcs.HighWater - 1; s >= 0; s--)
         {
             if (!npcs.Alive[s]) continue;
             int b = BinOf(npcs.X[s], npcs.Z[s]);
+            _bin[s] = b;
             _next[s] = _head[b];
             _head[b] = s;
         }
@@ -51,4 +53,18 @@ public sealed class SpatialGrid
     public int Head(int bx, int bz) => _head[bz * _binsX + bx];
 
     public int Next(int slot) => _next[slot];
+
+    /// <summary>
+    /// M8: bin of a slot as of the last <see cref="Rebuild"/>. A range walk visits bins in ascending index order and each
+    /// bin in ascending slot order, so (bin, slot) is the order in which <see cref="Range"/> scans meet NPCs; searches
+    /// that find candidates another way use it to break distance ties exactly as a scan would.
+    /// </summary>
+    public int BinIndexOf(int slot) => _bin[slot];
+
+    /// <summary>True when the slot's bin (as of the last rebuild) lies inside a <see cref="Range"/> rectangle.</summary>
+    public bool InRange(int slot, int bx0, int bx1, int bz0, int bz1)
+    {
+        int b = _bin[slot], bx = b % _binsX, bz = b / _binsX;
+        return bx >= bx0 && bx <= bx1 && bz >= bz0 && bz <= bz1;
+    }
 }

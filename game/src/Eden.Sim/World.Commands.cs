@@ -317,7 +317,9 @@ public sealed partial class World
     {
         EnsureKnowledgeSlot(slot);
         float before = Proficiency(slot, conceptId);
-        (_knowledge[slot] ??= new Dictionary<string, float>(StringComparer.Ordinal))[conceptId] = Math.Clamp(proficiency, 0f, 1f);
+        float value = Math.Clamp(proficiency, 0f, 1f);
+        (_knowledge[slot] ??= new Dictionary<string, float>(Graph.Count, StringComparer.Ordinal))[conceptId] = value;
+        if (Graph is not null && Graph.TryIndex(conceptId, out int index)) MirrorProf(slot, index, value); // M8 rows
         AfterKnowledgeSet(slot, conceptId, before);
     }
 

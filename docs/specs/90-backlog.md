@@ -10,26 +10,23 @@ and M6 merges.
 | Item | Belongs to | Note |
 |---|---|---|
 | Animals are resource herds (`ResourceNodes` kind `game`), not agents | M3 or M8 | Plan wanted animals as simple agents; herds were enough for M1 food. Revisit when predators or herding matter. |
-| Re-run the M4 "concept reaches a second settlement only after contact" test on real M3 settlements | next Sim pass (not done in M5) | M4 proved it with two separated groups; the wiring (`World.Integration.cs`: BuildingKinds as `IBuildingUnlocks`, archives host records, farm yields use knowledge) landed at the M3/M4 merge. |
 | yieldMod on derived goods other than grain (fish, clay, hide, cloth, metals) has no producer yet | next Sim pass | Farming already multiplies grain by `World.YieldFactor`. Crafting a tool uses one unit of its first material node only. |
-| Truncated save body can leave a half-loaded world | M8 (save pass) | Garbage files are rejected; a good header with a cut-off body is not. Load into a scratch world and swap on success. |
-| ~4 KB per tick of allocation from birth/death/gossip events | M8 | 5,000 NPCs tick in 2.5 ms today; events are the remaining allocator. |
+| Memory text is built eagerly (`$"{teller} told me: ..."`), so gossip and first lessons allocate on the tick | later perf pass | M8 removed every other tick allocation (STATUS M8); what is left is the `Memory`, its text and its subjects, which are saved state. A template id + arguments rendered on demand would remove most of it, but `Contains`, `ContainsStory`, the hash and the save read the text. |
+| C1's `CHRN` chronicle section must use format-2 framing | merge of C1 + M8 | M8 changed section headers (flags byte, Brotli). `World.Section(w, tag, body)` keeps the old 3-argument call; a reader should find its section with `World.SectionsOf(body, formatVersion)` rather than parse the framing, and should run inside `SaveReader.LoadScratch` as well so a damaged section fails before the live world is touched. |
 
 ## Knowledge (from the M3/M4 merge review, `51-knowledge-roadmap.md`)
 
 | Item | Belongs to | Note |
 |---|---|---|
 | Re-check pace with live LLM inventions (K1 assumed ≈ 10 % extra discovery pressure) | when a Mind runs headless or in a long play session | K1 tuned headless: median writing ≈ 190, bronze ≈ 385. Re-run `--seeds 1..20 --years 500 --pace` with inventions on. |
-| Bronze era is bimodal and 7/18 seeds have no bronze by year 500 | next balance pass or M8 | Copper → metalworking → bronze are three hard steps (0.94/0.94/0.93) after a farming boom; consider fewer, softer steps plus a population-aware discovery term. `PacingTests.Median_seed_writes_and_casts_bronze_inside_the_bands` (EDEN_PACE_FULL=1) checks the band. |
-| Full pacing test is opt-in (`EDEN_PACE_FULL=1`), not in check.sh | M8 (scale/perf) | 20 seeds × up to 500 years is ~40 min of simulation; check.sh runs only the 40-year early-game half. |
+| Bronze era is bimodal; after M8 8/18 seeds have no bronze by year 500 and the opt-in band test fails | next balance pass | Copper → metalworking → bronze are three hard steps (0.94/0.94/0.93) after a farming boom; consider fewer, softer steps plus a population-aware discovery term. `PacingTests.Median_seed_writes_and_casts_bronze_inside_the_bands` (EDEN_PACE_FULL=1) passed on phase5-base (median bronze year 408, writing 200) and fails after M8's site picker changed every trajectory: writing 198 (in band), bronze 479 (band 300–450; 10 seeds cast bronze, 9 of them by year 450). Release sweep `--seeds 1..20 --years 500 --pace`, numbers in STATUS M8. |
+| Full pacing test is opt-in (`EDEN_PACE_FULL=1`), not in check.sh | later perf pass | After M8 the same work as a Release sweep takes 17.5 min (35 min for phase5-base on a busier machine); in Debug, as check.sh runs it, it passed an hour without finishing. Under ~10 min it could join check.sh. |
 | New effect primitives (`needMod`, `speedMod`, `unlockRecipe`) | when a concept needs one, one PR each | Roadmap item 4. |
-| `user://data/` override for concepts and ids | M8 or later | Roadmap item 5. |
 
 ## Eden.Sim (from the art pass review)
 
 | Item | Belongs to | Note |
 |---|---|---|
-| Building site picker should prefer flat ground (max slope under the footprint) and flatten the sim heightmap slightly on completion | M3 owner, next Sim pass | Render-side foundations/flattening land in A1 regardless; this makes pathing and placement agree with the picture. |
 
 ## Eden.Game (from M2, `40-game-client.md`)
 
@@ -38,11 +35,12 @@ and M6 merges.
 | Buildings, trees and other people do not block the possessed body | next possession pass | M6 resolved the nav-baking row without navigation: the sim decides where bodies walk and `TerrainCollision` adds a trimesh for the 3×3 chunks around the possessed body only (DECISIONS 2026-11-06). Add building/tree shapes on layer 10 near the player if walking through houses bothers. |
 | `FakeSimHost` ignores possession commands | keep unless needed | The director falls back to god view after 3 s ("The world did not let you in"); possession needs the real sim. |
 | More possessed verbs (trade, court, eat on demand) | when wanted | M6 kept the contract's talk/give/work; the body eats and drinks on its own when desperate. |
-| `game/assets/` is `.gdignore`d and loaded at runtime | M8 (export) | A1 loads GLB/PNG/JPG/TTF with `GltfDocument`/`Image`/`FontFile` from `res://` files (DECISIONS 2026-11-06). An exported build must ship them as non-resource files (export filter `assets/*`) or move them to imported resources. |
+| Export packs `game/assets/` through a staging copy | art owner, when convenient | Godot skips `.gdignore`d folders on export, so `game/tools/export/export.sh` copies `game/` to `build/stage/`, drops the `.gdignore` and marks each asset `importer="keep"` (DECISIONS 2026-11-07 "M8: export"). Moving the assets to imported resources (or a different ignore scheme) would let the editor export directly. |
+| `TerrainBuilder` rebuilds every chunk when the heightmap instance changes | art owner (`World/TerrainBuilder.cs`) | M8 flattens the sim heightmap under finished buildings and therefore republishes heights only once per in-game year; rebuilding just the chunks under changed cells would allow every completion to show at once. |
+| Linux export is built but not run | whoever has a Linux box | `game/tools/export/export.sh Linux` produces `build/linux/Eden.x86_64` + PCK; only the macOS app was booted. |
 | Game herds (`ResourceView` kind `game`) are not drawn | next art pass or M8 | No CC0 animal model was chosen in A1; the views are emitted and skipped by `ResourceRenderer`. |
 | Nova Roma extras not done: cartoon cumulus clouds, roads that follow the terrain, bridges, record stelae and shrine altars as own meshes | next art pass | A1 paints dirt yards and straight roads to the settlement centre and builds plinths/boats procedurally; the rest is open. |
 | One-off hitches: decor rebuild when a building completes (~65k-cell scan), impostor atlas readback at startup, first night shader variant | M8 | Visible as a single low sample in the 5,000-NPC run; averages stay within budget. |
-| Seed 20 at year 60 has ≈300 people, not the ≈1,000 spec 45 assumed | balance pass / spec 45 | Budgets were also measured at year 120 (see STATUS A1). |
 | Settlement panel has no food stock, and "what a settlement knows" is a sample of ≤ 8 adults | next contract pass | Needs `SettlementView.Food` and a per-settlement knowledge summary in the contract (DECISIONS "settlement knowledge is sampled"). |
 | Overlay territory is a 64 m circle from `SimConfig` defaults, not the sim's real land or its config | next contract pass | Add a radius (or a territory mask) to `SettlementView` if a run changes `SettlementRadius`/`TerritoryFactor`. |
 | Chronicle bursts of more than 32 entries between two frames lose the oldest ones; history before the session starts is not shown | next contract pass or save pass | `NewChronicle` covers only the last published snapshot; the client merges the 32-entry `RecentChronicle` tail. A "chronicle since tick" query or saved history would close it. |
@@ -74,10 +72,8 @@ and M6 merges.
 | Prayer is rare until villages are large (seed 20: first prayer at year 66) | balance pass | M1's Pray score (piety × (0.45 dPurpose + 0.3 fear)) seldom wins; M7 only multiplies it near a shrine (×1.6, + 0.1 × piety for believers). Raise the base if faiths should feel more present. |
 | Faith is per faction, not per person | later, if schisms need to split villages | A settlement's adults all follow their faction's faith; "faithful" is only the 40 % founding count. |
 | "Bad harvests" have no event to attribute | when crop failure becomes an event | Attribution covers deaths (starvation included), raids, discoveries and retold stories. |
-| M3 Slow test `Two_settlements_trade_and_raid…` has no year cap below 600 | next Sim pass (owner of `SocietyTests.cs`) | Each seed runs until its first raid or 20 generations. Since M7 (and any trajectory change) seed 1 raids first at year 131, pop 1,921, so the test takes ≈ 20 min instead of ≈ 1 min. Cap the horizon (e.g. 120 years) or count "raid by year X" as the ratio. |
 
 ## Contracts (`docs/specs/contracts/`)
 
 | Item | Belongs to | Note |
 |---|---|---|
-| Save-format version bump rules | M8 | `SaveWriter` sections are tagged and versioned; write the compatibility policy down when the first breaking change happens. |

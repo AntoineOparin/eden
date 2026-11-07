@@ -31,14 +31,13 @@ public sealed class Relationships
         _pairs[k] = r;
     }
 
-    /// <summary>Drop every pair involving <paramref name="id"/> (on death). Not on the per-tick path.</summary>
+    /// <summary>Drop every pair involving <paramref name="id"/> (on death). Allocation-free: Dictionary.Remove is
+    /// allowed while enumerating (.NET Core 3+), and the table is never iterated by sim logic, so slot reuse order
+    /// cannot leak into the sim.</summary>
     public void Forget(int id)
     {
-        List<long>? dead = null;
         foreach (var k in _pairs.Keys)
-            if ((int)(k >> 32) == id || (int)(uint)k == id) (dead ??= new()).Add(k);
-        if (dead is null) return;
-        foreach (var k in dead) _pairs.Remove(k);
+            if ((int)(k >> 32) == id || (int)(uint)k == id) _pairs.Remove(k);
     }
 
     /// <summary>All pairs involving <paramref name="id"/>, for the inspector.</summary>

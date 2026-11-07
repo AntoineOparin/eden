@@ -17,7 +17,7 @@ readable from the god camera at 140 m and pleasant at 30 m. References: `docs/ar
 |---|---|
 | FakeSimHost, 2,000 NPCs, 1600×900, vsync off | 60 fps average over 10 s |
 | FakeSimHost, 5,000 NPCs, same | 30 fps average |
-| Real sim, seed 20, year 60 (≈1,000 people, 10+ settlements, buildings, crops) | 60 fps |
+| Real sim, seed 20, year 60 (≈300 people and 10 settlements as measured in A1; ≈1,450 people at year 120) | 60 fps |
 | Draw calls at 2,000 NPCs | under 800 |
 | Startup to first frame | under 4 s |
 

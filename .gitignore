@@ -27,3 +27,6 @@ brain/.dev.vars
 
 # Claude Code agent worktrees
 .claude/worktrees/
+
+# Exported builds (M8)
+build/
