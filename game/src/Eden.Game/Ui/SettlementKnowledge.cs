@@ -3,59 +3,80 @@ using Eden.Sim.Contracts;
 namespace Eden.Game;
 
 /// <summary>
-/// What a settlement knows, estimated from a sample of its members' <see cref="NpcDetail.Knowledge"/> (M7 UI: the
-/// settlement panel and the knowledge-spread overlay). Details are built by the sim only for a bounded watch list, so
-/// this samples one settlement at a time (the leader plus up to <see cref="SampleSize"/> − 1 adults spread over the
-/// member list), polls <see cref="IWorldSnapshot.TryGetNpcDetail"/> until they answer or <see cref="JobSeconds"/>
-/// pass, and caches the result per in-game day, with a real-time floor (<see cref="MinRefreshSeconds"/>) so 500×
-/// does not resample forever. Driven by <see cref="Update"/> on a timer, never per frame.
+/// What each settlement knows and owns (the settlement panel and the knowledge-spread overlay), from the sim's
+/// <see cref="SettlementDetail"/> (C1; this replaced the M7 UI pass's sample of up to 8 members' NPC details). The sim
+/// builds details only for a bounded watch list (8), so this asks for at most <see cref="MaxOutstanding"/> settlements
+/// at a time (<see cref="WatchSettlementCommand"/> through <see cref="Enqueue"/> when set, plus the request a missed
+/// <see cref="IWorldSnapshot.TryGetSettlementDetail"/> makes by itself), polls until they answer or
+/// <see cref="RequestSeconds"/> pass, and caches each answer per in-game day with a real-time floor
+/// (<see cref="MinRefreshSeconds"/>) so 500× does not re-ask forever. Driven by <see cref="Update"/> on a timer.
 /// </summary>
 public sealed class SettlementKnowledge
 {
     public sealed class Entry
     {
-        public int SettlementId;
+        public required SettlementDetail Detail;
         public long Day;
         public double RealTime;
-        public int Members;
-        public int Sampled;
-        /// <summary>Concept id → (members in the sample who know it, best proficiency among them).</summary>
-        public readonly Dictionary<string, (int Knowers, float Best)> Concepts = new();
 
-        /// <summary>Concepts by number of knowers, then best proficiency.</summary>
-        public List<KeyValuePair<string, (int Knowers, float Best)>> Top(int n)
+        /// <summary>Concept id → the detail's row (holders, best proficiency, record marker).</summary>
+        public readonly Dictionary<string, SettlementConceptView> Concepts = new(StringComparer.Ordinal);
+
+        public int SettlementId => Detail.Id;
+        public int Members => Detail.Members;
+
+        /// <summary>The first <paramref name="n"/> concepts, most holders first (the sim's order).</summary>
+        public IReadOnlyList<SettlementConceptView> Top(int n)
         {
-            var list = Concepts.ToList();
-            list.Sort((a, b) => b.Value.Knowers != a.Value.Knowers ? b.Value.Knowers.CompareTo(a.Value.Knowers) : b.Value.Best.CompareTo(a.Value.Best));
-            if (list.Count > n) list.RemoveRange(n, list.Count - n);
+            var all = Detail.Concepts;
+            if (all.Count <= n) return all;
+            var list = new List<SettlementConceptView>(n);
+            for (int i = 0; i < n; i++) list.Add(all[i]);
             return list;
+        }
+
+        /// <summary>Concepts with a written record on the settlement's land.</summary>
+        public int Recorded
+        {
+            get
+            {
+                int r = 0;
+                foreach (var c in Detail.Concepts) if (c.HasRecord) r++;
+                return r;
+            }
         }
     }
 
-    public int SampleSize { get; set; } = 8;
-    public double JobSeconds { get; set; } = 3;
+    /// <summary>Requests in flight at once; below the sim's watch list (8) so the panel's settlement is never evicted.</summary>
+    public int MaxOutstanding { get; set; } = 4;
+    public double RequestSeconds { get; set; } = 3;
     public double MinRefreshSeconds { get; set; } = 6;
     public int TicksPerDay { get; set; } = 240;
 
+    /// <summary>Sends <see cref="WatchSettlementCommand"/> to the host when a request starts (Main sets it).</summary>
+    public Action<WorldCommand>? Enqueue { get; set; }
+
     private readonly Dictionary<int, Entry> _cache = new();
     private readonly List<int> _queue = new();
-    private Entry? _job;
-    private readonly List<int> _pending = new();
-    private double _jobStarted;
+    private readonly List<(int Id, double Started)> _pending = new();
     private double _clock;
 
-    /// <summary>Bumped when an entry finishes; consumers redraw only when it changes.</summary>
+    /// <summary>Bumped when an entry arrives; consumers redraw only when it changes.</summary>
     public int Version { get; private set; }
 
-    /// <summary>The settlement currently being sampled, or -1.</summary>
-    public int Sampling => _job?.SettlementId ?? -1;
-
     public Entry? Get(int settlementId) => _cache.TryGetValue(settlementId, out var e) ? e : null;
+
+    /// <summary>True while a request for the settlement is in flight.</summary>
+    public bool IsRequesting(int settlementId)
+    {
+        foreach (var p in _pending) if (p.Id == settlementId) return true;
+        return false;
+    }
 
     /// <summary>Ask for a settlement; <paramref name="first"/> puts it at the front of the queue (the open panel).</summary>
     public void Want(int settlementId, bool first = false)
     {
-        if (settlementId < 0 || _job?.SettlementId == settlementId) return;
+        if (settlementId < 0 || IsRequesting(settlementId)) return;
         int at = _queue.IndexOf(settlementId);
         if (at >= 0)
         {
@@ -73,67 +94,30 @@ public sealed class SettlementKnowledge
         return e.Day != tick / Math.Max(1, TicksPerDay) && _clock - e.RealTime >= MinRefreshSeconds;
     }
 
-    /// <summary>Advances sampling. Call a few times per second with the frame's snapshot.</summary>
+    /// <summary>Starts queued requests and collects answers. Call a few times per second with the frame's snapshot.</summary>
     public void Update(IWorldSnapshot s, double realSeconds)
     {
         _clock += realSeconds;
-        if (_job is null)
+        while (_pending.Count < Math.Max(1, MaxOutstanding) && _queue.Count > 0)
         {
-            while (_queue.Count > 0)
-            {
-                int id = _queue[0];
-                _queue.RemoveAt(0);
-                if (!IsStale(id, s.Tick)) continue;
-                Start(s, id);
-                break;
-            }
-            if (_job is null) return;
+            int id = _queue[0];
+            _queue.RemoveAt(0);
+            if (!IsStale(id, s.Tick)) continue;
+            Enqueue?.Invoke(new WatchSettlementCommand(id));
+            _pending.Add((id, _clock));
         }
         for (int i = _pending.Count - 1; i >= 0; i--)
         {
-            if (!s.TryGetNpcDetail(_pending[i], out var d)) continue; // asks the sim to watch it
-            _job.Sampled++;
-            foreach (var (concept, p) in d.Knowledge)
+            var (id, started) = _pending[i];
+            if (s.TryGetSettlementDetail(id, out var d)) // a miss asks the sim to watch it
             {
-                if (p <= 0f) continue;
-                _job.Concepts.TryGetValue(concept, out var c);
-                _job.Concepts[concept] = (c.Knowers + 1, MathF.Max(c.Best, p));
+                var e = new Entry { Detail = d, Day = s.Tick / Math.Max(1, TicksPerDay), RealTime = _clock };
+                foreach (var c in d.Concepts) e.Concepts[c.ConceptId] = c;
+                _cache[id] = e;
+                _pending.RemoveAt(i);
+                Version++;
             }
-            _pending.RemoveAt(i);
-        }
-        if (_pending.Count == 0 || _clock - _jobStarted >= JobSeconds)
-        {
-            _job.RealTime = _clock;
-            _cache[_job.SettlementId] = _job;
-            _job = null;
-            _pending.Clear();
-            Version++;
-        }
-    }
-
-    private void Start(IWorldSnapshot s, int settlementId)
-    {
-        _job = new Entry { SettlementId = settlementId, Day = s.Tick / Math.Max(1, TicksPerDay) };
-        _jobStarted = _clock;
-        _pending.Clear();
-        int leader = -1;
-        foreach (var v in s.Settlements.Span)
-            if (v.Id == settlementId) { leader = v.LeaderId; break; }
-        var npcs = s.Npcs.Span;
-        int members = 0;
-        foreach (var n in npcs)
-            if (n.SettlementId == settlementId && n.Stage is LifeStage.Adult or LifeStage.Elder) members++;
-        _job.Members = members;
-        if (leader >= 0) _pending.Add(leader);
-        int want = Math.Max(1, SampleSize) - _pending.Count;
-        if (want <= 0 || members == 0) return;
-        int stride = Math.Max(1, members / want), seen = 0;
-        foreach (var n in npcs)
-        {
-            if (n.SettlementId != settlementId || n.Stage is not (LifeStage.Adult or LifeStage.Elder)) continue;
-            if (seen++ % stride != 0 || n.Id == leader) continue;
-            _pending.Add(n.Id);
-            if (_pending.Count >= SampleSize) break;
+            else if (_clock - started >= RequestSeconds) _pending.RemoveAt(i); // abandoned, or the sim is paused: asked again later
         }
     }
 }

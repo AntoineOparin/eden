@@ -45,6 +45,13 @@ public sealed record PossessedInteractCommand(int TargetId, string Verb) : World
 /// </summary>
 public sealed record SetThinkingCommand(System.Collections.Generic.IReadOnlyList<int> NpcIds) : WorldCommand;
 
+/// <summary>
+/// C1: ask the sim to build <see cref="SettlementDetail"/> for a settlement from the next snapshot on (it joins the
+/// bounded watch list, like an NPC whose <see cref="IWorldSnapshot.TryGetNpcDetail"/> missed). Display only: never
+/// changes behaviour, the state hash or the save file. Unknown or abandoned ids are ignored.
+/// </summary>
+public sealed record WatchSettlementCommand(int Id) : WorldCommand;
+
 public sealed record SaveCommand(string Path) : WorldCommand;
 
 public sealed record LoadCommand(string Path) : WorldCommand;

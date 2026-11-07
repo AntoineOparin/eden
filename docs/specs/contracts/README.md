@@ -42,6 +42,36 @@ Changes:
   RNG, no state hash or save change); `FakeSimHost` emits six fake settlements. Note: code that imports both
   `Eden.Sim` and `Eden.Sim.Contracts` outside the `Eden.Sim` namespace must qualify `GodStance` (two enums share it).
 
+- 2026-11-07 (C1 contract pass, pre-approved): settlements and the Chronicle get real data instead of client estimates.
+
+  | Addition | Where | Meaning |
+  |---|---|---|
+  | `SettlementView.Food` (float, default 0) | `IWorldSnapshot.cs` | Food the settlement holds now, in the sim's food units (1 unit restores `SimConfig.FoodPerUnit` = 0.35 of a person's food need; an adult eats ≈ 1.6 a day): shared stock (pile + storehouses) plus what living members carry. Households keep no larder. |
+  | `SettlementView.TerritoryRadius` (float, default 0) | `IWorldSnapshot.cs` | Metres; the sim's own land circle, `SettlementRadius × TerritoryFactor` (what trespass and grievance use). 0 only from snapshots that predate C1. |
+  | `SettlementDetail(Id, Name, Members, Adults, Concepts, Buildings, Food, FoodPerDay)` | `IWorldSnapshot.cs` | On-request detail. `Adults` counts adults and elders. `Concepts`: every concept a member knows (proficiency > 0), most holders first. `Buildings`: finished buildings by kind, most first. `FoodPerDay`: what the members eat a day at the sim's rates (need decay / food per unit; children 0.85, infants 0.8; awake all day, so an upper bound). |
+  | `SettlementConceptView(ConceptId, Holders, BestProficiency, HasRecord)` | `IWorldSnapshot.cs` | `HasRecord`: a written record holding the concept lies inside the territory circle or in one of the settlement's buildings. |
+  | `BuildingCount(Kind, Count)` | `IWorldSnapshot.cs` | `Kind` is a `game/data/buildings.json` id. |
+  | `bool TryGetSettlementDetail(int id, out SettlementDetail)` | `IWorldSnapshot` | Same "request now, present on a later snapshot" semantics as `TryGetNpcDetail`. |
+  | `IReadOnlyList<ChronicleEntry> ChronicleSince(long tick)` | `IWorldSnapshot` | Every entry the sim still holds with `Tick > tick`, oldest first. The sim keeps 2,048 and saves them (`CHRN` section). `NewChronicle` stays for compatibility. |
+  | `WatchSettlementCommand(int Id)` | `ISimHost.cs` | Asks the sim to build that settlement's detail from the next snapshot on. Display only. |
+
+  **How a client gets a settlement detail.** Either send `WatchSettlementCommand(id)` through `ISimHost.Enqueue`
+  (what `SettlementKnowledge` does when a request starts) or just call `TryGetSettlementDetail(id, …)` on the
+  frame's snapshot: a miss for a living settlement asks the sim to watch it, exactly like a missed `TryGetNpcDetail`.
+  Snapshots from the next published batch on return the detail. The sim keeps a watch list of 8 settlements (least
+  recently requested dropped first) and refreshes a watched detail at most once per in-game hour, one per snapshot (new requests are built at once); abandoned
+  settlements drop out. While the sim is paused nothing is published, so a request waits. Keep at most a few requests
+  in flight (the client uses 4) so the open panel's settlement is not evicted.
+
+  **How a client reads the Chronicle.** Call `ChronicleSince(lastSeenTick − 1)` once per new snapshot and drop entries
+  already seen (same tick and text): god commands run between ticks, so an entry can carry the tick of a snapshot that
+  was already read. The first read (`ChronicleSince(long.MinValue)`) returns the whole history, including what a
+  loaded save carried; a new `load` entry means the world was replaced and the history with it.
+
+  All of it is read-only: no RNG draw, no state-hash change (tested over 10,000 ticks with and without requests); the
+  Chronicle section is saved but not hashed. Eden.Sim fills it in `World.Snapshot()` (`World.SettlementDetail.cs`,
+  `World.ChronicleSave.cs`); `FakeSimHost` fills every field with made-up but stable numbers.
+
 Invariants enforced by tests:
 
 - `BiomeId` (C#) is the meaning of every byte in `IWorldSnapshot.Biomes`; the grid layout

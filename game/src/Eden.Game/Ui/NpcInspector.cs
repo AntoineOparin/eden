@@ -48,7 +48,8 @@ public partial class NpcInspector : PanelContainer
     private GridContainer _knowledge = null!;
     private Label _knowledgeTitle = null!;
     private RichTextLabel _bodyTail = null!;
-    private readonly List<(Label Name, ProgressBar Bar)> _knowledgeRows = new();
+    private readonly List<(Label Name, ProgressBar Bar, Label From)> _knowledgeRows = new();
+    private readonly Dictionary<string, string> _teachers = new(StringComparer.Ordinal);
     private readonly List<KeyValuePair<string, float>> _knowledgeSorted = new();
     private const int MaxKnowledgeRows = 16;
     public int NpcId { get; private set; } = -1;
@@ -62,6 +63,9 @@ public partial class NpcInspector : PanelContainer
 
     /// <summary>Knowledge rows shown as "concept proficiency" (tests).</summary>
     public IEnumerable<string> KnowledgeRows => _knowledgeRows.Where(r => r.Name.Visible).Select(r => $"{r.Name.Text} {r.Bar.Value:0.00}");
+
+    /// <summary>Knowledge rows with a known teacher, as "concept: from" (tests).</summary>
+    public IEnumerable<string> KnowledgeTeachers => _knowledgeRows.Where(r => r.Name.Visible && r.From.Text.Length > 0).Select(r => $"{r.Name.Text}: {r.From.Text}");
 
     /// <summary>The settlement link's text, or "" when the NPC has no settlement (tests).</summary>
     public string SettlementText => _settlementLink is { Visible: true } l ? l.Text : "";
@@ -116,7 +120,7 @@ public partial class NpcInspector : PanelContainer
         inner.AddChild(_body);
         _knowledgeTitle = new Label { Name = "KnowledgeTitle", Text = "Knowledge", ThemeTypeVariation = "HeaderLabel" };
         inner.AddChild(_knowledgeTitle);
-        _knowledge = new GridContainer { Name = "Knowledge", Columns = 2 };
+        _knowledge = new GridContainer { Name = "Knowledge", Columns = 3 };
         inner.AddChild(_knowledge);
         _bodyTail = new RichTextLabel
         {
@@ -198,7 +202,7 @@ public partial class NpcInspector : PanelContainer
         if ((d.CurrentThought ?? ThoughtSource?.Invoke(d.Id)) is { } thought) _sb.Append("[b]Thought[/b]  [i]").Append(Escape(thought)).Append("[/i]\n");
         AppendPairs("Traits", d.Traits);
         _body.Text = _sb.ToString();
-        RenderKnowledge(d.Knowledge);
+        RenderKnowledge(d.Knowledge, d.Memories);
         _sb.Clear();
         _sb.Append("[b]Relationships[/b]\n");
         if (d.Relationships.Count == 0) _sb.Append("  none\n");
@@ -218,9 +222,13 @@ public partial class NpcInspector : PanelContainer
         _bodyTail.Text = _sb.ToString();
     }
 
-    /// <summary>Knowledge as proficiency bars, strongest first, at most <see cref="MaxKnowledgeRows"/> rows (pooled).</summary>
-    private void RenderKnowledge(IReadOnlyDictionary<string, float>? knowledge)
+    /// <summary>
+    /// Knowledge as proficiency bars, strongest first, at most <see cref="MaxKnowledgeRows"/> rows (pooled), each with
+    /// who it was learned from when the NPC still remembers it (roadmap 51 item 6; see <see cref="LearnedFrom"/>).
+    /// </summary>
+    private void RenderKnowledge(IReadOnlyDictionary<string, float>? knowledge, IReadOnlyList<MemoryView>? memories = null)
     {
+        LearnedFrom(memories, _teachers);
         _knowledgeSorted.Clear();
         if (knowledge is not null) _knowledgeSorted.AddRange(knowledge);
         _knowledgeSorted.Sort((a, b) => b.Value.CompareTo(a.Value));
@@ -233,24 +241,70 @@ public partial class NpcInspector : PanelContainer
                 MinValue = 0, MaxValue = 1, Step = 0.01, ShowPercentage = false,
                 CustomMinimumSize = new Vector2(160, 10), SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ShrinkCenter,
             };
+            var from = new Label { Modulate = new Color(1, 1, 1, 0.7f), ClipText = true, CustomMinimumSize = new Vector2(84, 0) };
+            from.AddThemeFontSizeOverride("font_size", 12);
             _knowledge.AddChild(name);
             _knowledge.AddChild(bar);
-            _knowledgeRows.Add((name, bar));
+            _knowledge.AddChild(from);
+            _knowledgeRows.Add((name, bar, from));
         }
         for (int i = 0; i < _knowledgeRows.Count; i++)
         {
-            var (name, bar) = _knowledgeRows[i];
+            var (name, bar, fromLabel) = _knowledgeRows[i];
             bool on = i < rows;
-            name.Visible = bar.Visible = on;
+            name.Visible = bar.Visible = fromLabel.Visible = on;
             if (!on) continue;
             var (concept, p) = _knowledgeSorted[i];
             name.Text = concept;
             bar.Value = p;
-            bar.TooltipText = $"{concept}: proficiency {p:0.00}";
+            string? teacher = TeacherOf(concept, _teachers);
+            fromLabel.Text = teacher is null ? "" : $"from {teacher}";
+            bar.TooltipText = teacher is null ? $"{concept}: proficiency {p:0.00}" : $"{concept}: proficiency {p:0.00}, learned from {teacher}";
         }
         _knowledgeTitle.Text = _knowledgeSorted.Count > rows
             ? $"Knowledge  ({_knowledgeSorted.Count}, strongest {rows} shown)"
             : _knowledgeSorted.Count == 0 ? "Knowledge  (none)" : $"Knowledge  ({_knowledgeSorted.Count})";
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex Taught =
+        new(@"^(?<who>.+) (?:taught|told|showed) me (?<what>.+)\.$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+    private static readonly System.Text.RegularExpressions.Regex FromRecords =
+        new(@"^I learned (?<what>.+) from the written records\.$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// Who taught what, from the NPC's own memories (no contract field: the sim writes "Ada taught me pottery.",
+    /// "… told me …", "… showed me …" and "I learned pottery from the written records." when a concept is first
+    /// learned; a forgotten memory means an unknown teacher). Fills concept text (as remembered) → teacher; the
+    /// earliest memory wins.
+    /// </summary>
+    public static void LearnedFrom(IReadOnlyList<MemoryView>? memories, Dictionary<string, string> into)
+    {
+        into.Clear();
+        if (memories is null) return;
+        var ticks = new Dictionary<string, long>(StringComparer.Ordinal);
+        foreach (var m in memories)
+        {
+            string? who = null, what = null;
+            if (Taught.Match(m.Text) is { Success: true } t) { who = t.Groups["who"].Value; what = t.Groups["what"].Value; }
+            else if (FromRecords.Match(m.Text) is { Success: true } r) { who = "the records"; what = r.Groups["what"].Value; }
+            if (who is null || what is null) continue;
+            what = what.ToLowerInvariant();
+            if (ticks.TryGetValue(what, out long seen) && seen <= m.Tick) continue;
+            ticks[what] = m.Tick;
+            into[what] = who;
+        }
+    }
+
+    /// <summary>The teacher of a concept id from <see cref="LearnedFrom"/>'s map: memories name concepts in words
+    /// ("stone knapping" for <c>stone-knapping</c>; "herding" for <c>animal-herding</c>).</summary>
+    public static string? TeacherOf(string conceptId, IReadOnlyDictionary<string, string> teachers)
+    {
+        if (teachers.Count == 0) return null;
+        string words = conceptId.Replace('-', ' ').ToLowerInvariant();
+        if (teachers.TryGetValue(words, out var who)) return who;
+        foreach (var (what, teacher) in teachers)
+            if (words.EndsWith(" " + what, StringComparison.Ordinal)) return teacher;
+        return null;
     }
 
     private void AppendPairs(string title, IReadOnlyDictionary<string, float> values)

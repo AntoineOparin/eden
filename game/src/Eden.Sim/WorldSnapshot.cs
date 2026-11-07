@@ -48,6 +48,35 @@ public sealed class WorldSnapshot(
         return false;
     }
 
+    /// <summary>C1: the sim's Chronicle history (oldest first) as of this snapshot; shared, never mutated.</summary>
+    public IReadOnlyList<ChronicleEntry> History { get; init; } = [];
+
+    /// <summary>C1: details of the watched settlements, built by the sim for this snapshot.</summary>
+    public IReadOnlyDictionary<int, SettlementDetail> SettlementDetails { get; init; } = new Dictionary<int, SettlementDetail>();
+
+    /// <summary>C1: where a missed <see cref="TryGetSettlementDetail"/> asks the sim to watch a settlement.</summary>
+    public ConcurrentQueue<int>? SettlementRequests { get; init; }
+
+    public IReadOnlyList<ChronicleEntry> ChronicleSince(long tick)
+    {
+        // A plain filter (at most 2,048 compares): ticks are non-decreasing in practice, but a filter cannot be fooled.
+        var h = History;
+        int n = 0;
+        for (int i = 0; i < h.Count; i++) if (h[i].Tick > tick) n++;
+        if (n == 0) return [];
+        var result = new ChronicleEntry[n];
+        for (int i = 0, k = 0; i < h.Count; i++) if (h[i].Tick > tick) result[k++] = h[i];
+        return result;
+    }
+
+    public bool TryGetSettlementDetail(int id, out SettlementDetail detail)
+    {
+        if (SettlementDetails.TryGetValue(id, out detail!)) return true;
+        foreach (var v in Settlements.Span)
+            if (v.Id == id) { SettlementRequests?.Enqueue(id); break; }
+        return false;
+    }
+
     public int TicksPerHour => _mind.TicksPerHour;
     public int HoursPerDay => _mind.HoursPerDay;
     public IReadOnlyList<int> LeaderIds => _mind.Leaders;

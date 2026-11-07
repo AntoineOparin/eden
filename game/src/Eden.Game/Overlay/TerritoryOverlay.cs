@@ -8,8 +8,10 @@ public enum OverlayMode { Off, Stance, Religion, Knowledge }
 /// <summary>
 /// Religion / god-standing / knowledge-spread overlay (M7 UI). One translucent disc per settlement, draped over the
 /// rendered terrain (a polar grid sampled from <see cref="Ground"/>, lifted <see cref="Lift"/> m), radius
-/// <c>SettlementRadius × TerritoryFactor</c> from <see cref="Eden.Sim.SimConfig"/> (the territory raids use), with a
-/// brighter rim and the settlement's name floating above the centre. Colours come from <see cref="OverlayColors"/>.
+/// <see cref="SettlementView.TerritoryRadius"/> (C1: the sim's own value, the land trespass and grievance use;
+/// <see cref="Radius"/> only when a snapshot leaves it 0), with a brighter rim and the settlement's name floating
+/// above the centre. Knowledge mode colours by the share of members who know the concept, from the sim's
+/// <see cref="SettlementDetail"/> (through <see cref="SettlementKnowledge"/>). Colours come from <see cref="OverlayColors"/>.
 /// Meshes rebuild only when the set of settlements, their centres or the terrain change; colours update on a timer.
 /// Off by default; when off, the node is hidden and does no work.
 /// </summary>
@@ -30,7 +32,14 @@ public partial class TerritoryOverlay : Node3D
     [Export] public int Rings { get; set; } = 20;
     [Export] public int Segments { get; set; } = 56;
 
+    /// <summary>Fallback radius for a snapshot without <see cref="SettlementView.TerritoryRadius"/>.</summary>
     public float Radius { get; set; } = DefaultRadius;
+
+    /// <summary>The radius drawn for a settlement: its territory radius from the sim, else <see cref="Radius"/>.</summary>
+    public float RadiusOf(in SettlementView v) => RadiusFor(v, Radius);
+
+    /// <summary>Pure form of <see cref="RadiusOf"/>: the view's territory radius, else <paramref name="fallback"/>.</summary>
+    public static float RadiusFor(in SettlementView v, float fallback) => v.TerritoryRadius > 0f ? v.TerritoryRadius : fallback;
 
     public static float DefaultRadius
     {
@@ -55,7 +64,7 @@ public partial class TerritoryOverlay : Node3D
 
     private static Shader? _shader;
     private ShaderMaterial? _material;
-    private readonly Dictionary<int, (MeshInstance3D Disc, Label3D Label, float X, float Z, int GroundVersion)> _discs = new();
+    private readonly Dictionary<int, (MeshInstance3D Disc, Label3D Label, float X, float Z, int GroundVersion, float R)> _discs = new();
     private readonly HashSet<int> _seen = new();
     private double _since = double.MaxValue;
 
@@ -64,6 +73,12 @@ public partial class TerritoryOverlay : Node3D
 
     /// <summary>Tint of a settlement's disc as last applied (tests, legend).</summary>
     public Color TintOf(int settlementId) => _discs.TryGetValue(settlementId, out var d) ? (Color)d.Disc.GetInstanceShaderParameter("tint") : default;
+
+    /// <summary>Radius of a settlement's disc as last built (tests).</summary>
+    public float DrawnRadiusOf(int settlementId) => _discs.TryGetValue(settlementId, out var d) ? d.R : 0f;
+
+    /// <summary>Caption of a settlement's disc as last applied (tests).</summary>
+    public string CaptionOf(int settlementId) => _discs.TryGetValue(settlementId, out var d) ? d.Label.Text : "";
 
     public void SetMode(OverlayMode mode, string? concept = null)
     {
@@ -90,7 +105,9 @@ public partial class TerritoryOverlay : Node3D
         foreach (var v in s.Settlements.Span)
         {
             _seen.Add(v.Id);
-            if (!_discs.TryGetValue(v.Id, out var d) || MathF.Abs(d.X - v.X) > 4f || MathF.Abs(d.Z - v.Z) > 4f || d.GroundVersion != GroundVersion)
+            float radius = RadiusOf(v);
+            if (!_discs.TryGetValue(v.Id, out var d) || MathF.Abs(d.X - v.X) > 4f || MathF.Abs(d.Z - v.Z) > 4f || d.GroundVersion != GroundVersion
+                || MathF.Abs(d.R - radius) > 0.5f)
             {
                 if (d.Disc is null)
                 {
@@ -103,11 +120,11 @@ public partial class TerritoryOverlay : Node3D
                     if (UiTheme.BodyFont is { } font) label.Font = font;
                     AddChild(disc);
                     AddChild(label);
-                    d = (disc, label, v.X, v.Z, GroundVersion);
+                    d = (disc, label, v.X, v.Z, GroundVersion, radius);
                 }
-                d.Disc.Mesh = BuildDisc(v.X, v.Z, s);
+                d.Disc.Mesh = BuildDisc(v.X, v.Z, radius, s);
                 d.Label.Position = new Vector3(v.X, HeightAt(v.X, v.Z, s) + 14f, v.Z);
-                _discs[v.Id] = (d.Disc, d.Label, v.X, v.Z, GroundVersion);
+                _discs[v.Id] = (d.Disc, d.Label, v.X, v.Z, GroundVersion, radius);
             }
             var (tint, caption) = Describe(v);
             d = _discs[v.Id];
@@ -134,8 +151,8 @@ public partial class TerritoryOverlay : Node3D
                 var e = Knowledge?.Get(v.Id);
                 if (Concept is null || e is null) return (OverlayColors.KnowledgeUnknown, $"{v.Name}\n…");
                 e.Concepts.TryGetValue(Concept, out var c);
-                float share = e.Sampled > 0 ? c.Knowers / (float)e.Sampled : 0f;
-                return (OverlayColors.Knowledge(share), $"{v.Name}\n{c.Knowers}/{e.Sampled} know {Concept}");
+                float share = e.Members > 0 ? c.Holders / (float)e.Members : 0f;
+                return (OverlayColors.Knowledge(share), $"{v.Name}\n{c.Holders}/{e.Members} know {Concept}{(c.HasRecord ? ", written" : "")}");
             default:
                 return (OverlayColors.Stance(v.Stance), $"{v.Name}\n{OverlayColors.StanceWord(v.Stance)}");
         }
@@ -145,7 +162,7 @@ public partial class TerritoryOverlay : Node3D
         => MathF.Max(s.World.SeaLevel, Ground?.Invoke(x, z) ?? HeightField.Sample(s.Heights.Span, s.World, x, z));
 
     /// <summary>Polar grid draped on the ground; vertex alpha is a soft fill with a bright rim and a feathered edge.</summary>
-    private ArrayMesh BuildDisc(float cx, float cz, IWorldSnapshot s)
+    private ArrayMesh BuildDisc(float cx, float cz, float radius, IWorldSnapshot s)
     {
         int rings = Math.Max(2, Rings), segs = Math.Max(8, Segments);
         var verts = new Vector3[1 + rings * segs];
@@ -155,7 +172,7 @@ public partial class TerritoryOverlay : Node3D
         for (int r = 1; r <= rings; r++)
         {
             float t = r / (float)rings;
-            float rad = Radius * t;
+            float rad = radius * t;
             float a = t < 0.88f ? OverlayColors.FillAlpha : t < 0.97f ? OverlayColors.RimAlpha : 0f;
             for (int k = 0; k < segs; k++)
             {
@@ -233,6 +250,6 @@ public static class OverlayColors
         return Faiths[h % (uint)Faiths.Length];
     }
 
-    /// <summary>Share of sampled members who know the concept, 0..1 → brown to green.</summary>
+    /// <summary>Share of members who know the concept, 0..1 → brown to green.</summary>
     public static Color Knowledge(float share) => KnowsNone.Lerp(KnowsAll, Math.Clamp(share, 0f, 1f));
 }
