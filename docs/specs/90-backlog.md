@@ -19,9 +19,9 @@ item; remove it from here in the same PR that resolves it. Last updated 2026-11-
 
 | Item | Belongs to | Note |
 |---|---|---|
-| Forgetting: proficiency decay without practice, records as the floor | balance pass after M5 | Roadmap item 1. |
-| Pace: era length targets, then tune discovery/chatter/teach rates with LLM inventions on | balance pass after M5 | Roadmap item 2. Add writing@ / bronze@ sweep columns. |
-| Graph depth: 3 to 5 prerequisite chains for late-era concepts | M8 content pass or with the pace pass | Roadmap item 3. |
+| Re-check pace with live LLM inventions (K1 assumed ≈ 10 % extra discovery pressure) | when a Mind runs headless or in a long play session | K1 tuned headless: median writing ≈ 190, bronze ≈ 385. Re-run `--seeds 1..20 --years 500 --pace` with inventions on. |
+| Bronze era is bimodal and 7/18 seeds have no bronze by year 500 | next balance pass or M8 | Copper → metalworking → bronze are three hard steps (0.94/0.94/0.93) after a farming boom; consider fewer, softer steps plus a population-aware discovery term. `PacingTests.Median_seed_writes_and_casts_bronze_inside_the_bands` (EDEN_PACE_FULL=1) checks the band. |
+| Full pacing test is opt-in (`EDEN_PACE_FULL=1`), not in check.sh | M8 (scale/perf) | 20 seeds × up to 500 years is ~40 min of simulation; check.sh runs only the 40-year early-game half. |
 | New effect primitives (`needMod`, `speedMod`, `unlockRecipe`) | when a concept needs one, one PR each | Roadmap item 4. |
 | `user://data/` override for concepts and ids | M8 or later | Roadmap item 5. |
 | Knowledge UI: settlement knowledge panel, Chronicle filters, spread overlay, proficiency bars | post-M5 UI pass, M7 overlay | Roadmap item 6. Not done in M5 (the M5 UI pass covered dialogue, brain settings, budget meter, god-powers toolbar). The inspector already lists knowledge with proficiency numbers. |

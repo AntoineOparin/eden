@@ -122,5 +122,37 @@ public class ConceptGraphTests
         foreach (var id in ConceptGraph.StarterSet) Assert.Equal(0u, Shipped[Index(id)].ActionMask);
     }
 
+    [Fact]
+    public void Late_eras_sit_behind_deep_prerequisite_chains_and_the_early_game_stays_wide()
+    {
+        // K1 (51-knowledge-roadmap.md item 3): depth = edges on the longest prerequisite path back to a starter.
+        var depth = new int[Shipped.Count];
+        var done = new bool[Shipped.Count];
+        int Depth(int i)
+        {
+            if (done[i]) return depth[i];
+            int d = 0;
+            foreach (int p in Shipped[i].Prereqs) d = Math.Max(d, Depth(p) + 1);
+            done[i] = true;
+            return depth[i] = d;
+        }
+        int longest = Enumerable.Range(0, Shipped.Count).Max(Depth);
+        Assert.True(longest >= 5, $"longest prerequisite chain is only {longest}");
+
+        string[] late = ["bronze-casting", "iron-smelting", "smithing", "writing", "law-codes", "astronomy"];
+        foreach (var id in late)
+        {
+            var n = Shipped[Index(id)];
+            Assert.InRange(n.Prereqs.Length, 3, 5);
+            Assert.True(Depth(n.Index) >= 5, $"{id} sits only {Depth(n.Index)} steps from the start");
+            Assert.True(n.Difficulty >= 0.7f, $"{id} difficulty {n.Difficulty}");
+        }
+        // Wide early game: nothing within two steps of the starters needs more than two things.
+        foreach (var n in Shipped.Nodes.Where(n => Depth(n.Index) <= 2))
+            Assert.True(n.Prereqs.Length <= 2, $"{n.Id} is early but needs {n.Prereqs.Length} prerequisites");
+        // And deeper chains must not strand anything.
+        Assert.Empty(Shipped.Unreachable());
+    }
+
     private static int Index(string id) => Shipped.TryIndex(id, out int i) ? i : throw new KeyNotFoundException(id);
 }
