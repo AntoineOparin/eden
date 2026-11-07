@@ -9,4 +9,10 @@ The art-pass agent and the coordinator read this folder before touching shaders 
 
 | File | Take from it |
 |---|---|
-| | |
+| `lowpoly_village.jpg` | The target look for settlements: half-timber walls, orange tile and thatch roofs, warm wood, bright saturated grass, soft directional sun with gentle shadows, props (barrels, carts, stalls, well with blue stone). Our ten building kinds should feel like this family. |
+| `lowpoly_village_2.jpeg` | Same family at street level: fences, cobble paths, conifers with layered flat tiers, distant faceted hills. Good reference for the 30 m zoom and for the possession view later. |
+| `lowpoly_nature.webp` | Trees, rocks, mushrooms, logs: large flat facets, 2–3 greens per tree, dead trees for drought, round rocks in grey. Our three biome tree sets and berry bushes should match this silhouette language. |
+| `medieval-lowpoly-peasants-citizens.jpg` | NPC proportions and shading: slightly stocky humans, flat colour clothing with 2–3 tones, visible but soft facets, hats and tools as identity. Also the terrain idea: grass as a flat colour with sparse flower clumps, dirt paths. |
+| `lowpoly_city.webp` | Not our architecture. Take only the readability from above: clear silhouettes and strong colour blocking at a steep camera angle, which is what our 140 m god view needs. |
+
+Palette takeaway: grass #7FBF4D-ish saturated green, dirt warm brown, roofs burnt orange / terracotta, wood mid brown, stone cool grey-blue, water clear turquoise near shore to deep blue. Lighting: warm key light, slightly cool ambient, no harsh black shadows.
