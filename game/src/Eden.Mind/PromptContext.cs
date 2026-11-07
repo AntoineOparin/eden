@@ -60,8 +60,44 @@ public static partial class PromptContext
             : view is { } p ? $"in the wilds of the island ({p.X:0}, {p.Z:0})" : "somewhere on the island";
         string persona = Persona(d, settlement, leader, view);
         if (OnTheirMind(d, snap) is { } shaken) persona = Clip(persona + " " + shaken, 4000);
+        if (GodLine(view, snap) is { } god) persona = Clip(persona + " " + god, 4000);
         return new NpcContext(d.Id, Clip(string.IsNullOrWhiteSpace(d.Name) ? $"Npc {d.Id}" : d.Name, 64),
             Math.Clamp(d.AgeYears, 0, 200), persona, traits, needs, knowledge, goals, Clip(location, 280));
+    }
+
+    /// <summary>M7: Awe at or above which the reflection prompt asks for a belief about the god.</summary>
+    public const float ReflectAwe = 0.3f;
+
+    /// <summary>
+    /// M7: one line on how the NPC's settlement stands with the god ("Your people believe the sky favours them."),
+    /// plus the envy or fear felt toward a more favoured neighbour and the faith they keep. Null outside a settlement
+    /// or when the snapshot has no standing (FakeSimHost).
+    /// </summary>
+    public static string? GodLine(NpcView? view, IWorldSnapshot snap)
+    {
+        if (view is not { } v || (snap as IMindSnapshot)?.GodStanding(v.SettlementId) is not { } g) return null;
+        var sb = new StringBuilder(g.Stance switch
+        {
+            "favourable" => "Your people believe the sky favours them.",
+            "fearful" => "Your people fear the sky.",
+            "hostile" => "Your people believe the sky has turned against them.",
+            _ => "Your people do not know what the sky wants of them.",
+        });
+        if (g.Religion is { } r) sb.Append(" They keep ").Append(r).Append('.');
+        if (g.EnviedSettlement is { } e && g.Envy >= 0.2f && g.Envy >= g.Fear)
+            sb.Append(" They envy ").Append(e).Append(", whom the sky favours more.");
+        else if (g.FearedSettlement is { } f && g.Fear >= 0.2f)
+            sb.Append(" They fear ").Append(f).Append(", whom the sky favours more.");
+        return sb.ToString();
+    }
+
+    /// <summary>M7: the reflection situation; when the settlement's Awe is high it asks for a belief about the god.</summary>
+    public static string ReflectionPrompt(NpcView? view, IWorldSnapshot snap)
+    {
+        var g = view is { } v ? (snap as IMindSnapshot)?.GodStanding(v.SettlementId) : null;
+        return g is { } s && s.Awe >= ReflectAwe
+            ? ReflectionSituation + ". One of them should be about the sky and what it wants of your people"
+            : ReflectionSituation;
     }
 
     /// <summary>Hours a dramatic memory (importance ≥ 8) stays "on their mind" in the persona.</summary>

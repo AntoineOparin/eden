@@ -161,3 +161,47 @@ Median over the 18 living seeds: writing year 64 → 190 (range 57–108 → 123
 by year 40, pictographs about year 90, writing in year 138, copper still unfound at year 140. Population
 has the same shape (about 1,400–2,200 from year 100): the boom still comes from farming. Bronze is
 bimodal (about 200–260, or 340 and later); see the backlog row.
+## 2026-11-06 — M7 myth, sim and Mind side (branch m7-myth-sim)
+God reputation per settlement (Favour, Awe; neighbours' Envy/Fear through contact), gossip distortion with
+god attribution and myth generations, rule-based god beliefs, religions (found, spread, schism) with shrines
+and prayer, a god-standing line in the Mind's persona and an Awe-gated reflection request, and a `--myth`
+runner report (`game/tools/Eden.Sim.Runner/MythReport.cs`). UI parts (religion overlay, Chronicle filters,
+settlement panel, remaining powers) wait for the A1 art pass (backlog). Details: `10-sim-core.md` "Myth (M7)",
+`20-mind.md` "As built (M7 sim side)", DECISIONS 2026-11-06 "M7 myth: …".
+
+**Verified.** `./scripts/check.sh` green. Sim tests 240 (was 207): +11 `MythTests`, +7 `GossipTests`,
++9 `ReligionTests`, +6 `Mind/GodStandingPromptTests`. The two existing Slow tests still pass (Population
+18/20 reached 50; Society: two settlements, a trade and a raid on 18/20 seeds), but the Society test now
+takes ≈ 21 min on a machine shared with two other agents (≈ 70 s before): seed 1's first raid moved from year
+77 to year 131 (population 1,921), and the test runs each seed until its first raid or 20 generations.
+Fair 70-year comparisons with religion/shrines switched off show no systematic effect on raids, so this is
+trajectory luck, not suppression (DECISIONS "shrines wait for an established village"); backlog row added. Save round trip and
+determinism cover all new state (`MYTH` section after `KNW2`).
+
+**Acceptance ratios.**
+- 10 daily blessings on one village over an in-game year: Favour 0.71 after the year and a favourable faith
+  5–16 days in, on **10/10** seeds (needed ≥ 7/10). Fast enough (0.25 s) to run without the Slow tag.
+- A neighbour in contact: Envy 0.35, Fear 0.09 (needed Envy or Fear > 0.3).
+- 10 lightning strikes, no blessing: Favour −0.57, Awe 0.74, stance **fearful**.
+- Gossip: every distorted copy differs in exactly one of subject / importance / attribution and carries
+  Generation + 1; no attribution at Awe 0.
+- Speed: `--bench 5000` 5.40 ms/tick vs 5.17 ms on phase3-base, same allocation per tick (machine shared
+  with two other agents' runs, so within noise).
+
+**Sample** (`--myth --seed 20 --years 80`, Release, no god actions; columns per decade):
+```
+ year  pop  settl  shrines  prayers  distorted  attributed  beliefs  religions (stance)
+   20   14      1        0        0        119           0        0  the Way of Palom (favourable)
+   40   46      3        3        0        409           0        0  the Way of Palom (favourable)
+   60  149      7        7        0       1118           0        0  the Way of Palom (favourable)
+   80  642     11        8       22       3777           0       21  the Way of Palom (favourable)
+  y17  [religion] Bemin of Stoneby gathered the faithful into the Way of Palom: they hold that the sky favours them.
+  y23  [shrine] A shrine to the sky was raised in Stoneby for the Way of Palom.
+  y55  [religion] The faithful of Elmdale took up the Way of Palom, the faith of Elmby.
+  y67  [prayer] Bemels of Fenholm offered the first prayer of the Way of Palom.
+```
+With `--strike` (lightning beside the first village every day for a year from year 15): Favour −0.55 / Awe
+0.67 at year 20 and 13–44 god-attributed retellings per decade while the Awe lasts. Schisms are covered by
+`ReligionTests` (the seed-20 strike sample loses its first village before a generation passes).
+
+**Not verified here.** The manual M7 check with the Mind on (coordinator, after merge). No UI.

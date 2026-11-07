@@ -172,6 +172,7 @@ public sealed partial class World
         UpdateAlliances();
         for (int s = 0; s < Npcs.HighWater; s++)
             if (Npcs.Alive[s] && _order[s] != 0 && _orderUntil[s] <= Tick) ClearOrder(s);
+        MythDaily(); // M7 (World.Myth.cs)
     }
 
     private void ClearOrder(int s)

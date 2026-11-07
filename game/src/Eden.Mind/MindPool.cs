@@ -376,7 +376,7 @@ public sealed class MindPool : IDisposable
         var memories = await RetrieveAsync(provider, d, snap, situation, ct);
         bool allowInvention = mode == ThinkMode.Thought && PromptContext.AllowInvention(d);
         var request = new ThinkRequest(PromptContext.Npc(d, view, snap), Lines(memories, snap), PromptContext.WorldRules,
-            mode == ThinkMode.Reflection ? PromptContext.ReflectionSituation : situation, 3, allowInvention);
+            mode == ThinkMode.Reflection ? PromptContext.ReflectionPrompt(view, snap) : situation, 3, allowInvention);
         var result = await provider.ThinkAsync(request, ct);
         Book(result.Usage);
 

@@ -2,8 +2,8 @@
 
 Items that an earlier milestone left out on purpose, decided differently from the plan, or
 flagged as a question. Each line says where it belongs. Whoever executes that milestone owns the
-item; remove it from here in the same PR that resolves it. Last updated 2026-11-06 by M5
-(minds).
+item; remove it from here in the same PR that resolves it. Last updated 2026-11-06 by M7
+(myth, sim side).
 
 ## Eden.Sim (from M1, `10-sim-core.md`)
 
@@ -40,7 +40,8 @@ item; remove it from here in the same PR that resolves it. Last updated 2026-11-
 | Buildings not drawn | A1 art pass | `BuildingView` exists in the contract; the sim does not emit buildings until M3. |
 | Hi-LOD NPC is a code-built capsule, no skinned glTF / `AnimationTree` | A1 art pass | Kenney/Quaternius CC0 packs as planned. Pool and slot logic are done. |
 | No per-chunk `NavigationRegion3D` baking | M6 | Only the possessed `CharacterBody3D` needs navigation; the sim never does. |
-| Settlement panel, Chronicle timeline, the other god powers (spawn, rain/drought, terraform, bless/curse, drop item) | M7 | M5 shipped the toolbar with Select / Lightning / Whisper, the brain settings panel, the budget meter and the dialogue panel. All other power commands already have sim handlers. |
+| Settlement panel, Chronicle timeline, the other god powers (spawn, rain/drought, terraform, bless/curse, drop item) | M7 UI pass (after the A1 art pass merges) | M5 shipped the toolbar with Select / Lightning / Whisper, the brain settings panel, the budget meter and the dialogue panel. All other power commands already have sim handlers, and since M7 every one of them moves the god's standing (`World.Myth.cs`). The settlement panel should show Favour/Awe/stance, the faith, Envy/Fear and the neighbour they point at: needs a contract field (see Contracts). |
+| Religion overlay and Chronicle filters for the M7 kinds (`religion`, `schism`, `shrine`, `prayer`) | M7 UI pass (after A1) | Sim side is done: faiths per faction, shrines are `BuildingView` kind `shrine`, Chronicle entries exist. The overlay needs the faction → faith map (contract field below). |
 | `FakeSimHost` stays under `src/Eden.Game/Dev/` | keep | Useful for perf runs; `--fake-sim --npcs=N --log-fps --screenshot=PATH --quit-after=S` are the CLI flags. |
 
 ## brain/ (from the Worker agent, `30-brain-worker.md`)
@@ -60,9 +61,20 @@ item; remove it from here in the same PR that resolves it. Last updated 2026-11-
 | Live check of "budget meter halts background thoughts at the cap" | next session with spare Neurons | Covered by `MindPoolTests` (90 % → dialogue only, 100 % → nothing); not exercised against the live Worker to save Neurons. |
 | At 500× a thought can land after its NPC died | balance pass | Intention is refused by the sim queue and logged; harmless, but thoughts are effectively rare at high speed (60 s real floor per NPC). |
 
+## Myth (from M7 sim side, `World.Myth.cs`)
+
+| Item | Belongs to | Note |
+|---|---|---|
+| Prayer is rare until villages are large (seed 20: first prayer at year 66) | balance pass | M1's Pray score (piety × (0.45 dPurpose + 0.3 fear)) seldom wins; M7 only multiplies it near a shrine (×1.6, + 0.1 × piety for believers). Raise the base if faiths should feel more present. |
+| Faith is per faction, not per person | later, if schisms need to split villages | A settlement's adults all follow their faction's faith; "faithful" is only the 40 % founding count. |
+| "Bad harvests" have no event to attribute | when crop failure becomes an event | Attribution covers deaths (starvation included), raids, discoveries and retold stories. |
+| M3 Slow test `Two_settlements_trade_and_raid…` has no year cap below 600 | next Sim pass (owner of `SocietyTests.cs`) | Each seed runs until its first raid or 20 generations. Since M7 (and any trajectory change) seed 1 raids first at year 131, pop 1,921, so the test takes ≈ 20 min instead of ≈ 1 min. Cap the horizon (e.g. 120 years) or count "raid by year X" as the ratio. |
+| Manual M7 check with the Mind on (reflections mention the god favourably, a neighbour's mention envy or fear) | coordinator after merge | The prompt line and reflection request are unit-tested (`GodStandingPromptTests`); not run against a live provider. |
+
 ## Contracts (`docs/specs/contracts/`)
 
 | Item | Belongs to | Note |
 |---|---|---|
+| Settlement / god-standing view in `IWorldSnapshot` for the M7 UI | M7 UI pass | Proposed: `SettlementView(Id, Name, X, Z, Members, FactionId, LeaderId, Favour, Awe, Envy, Fear, EnviedId, FearedId, Stance, ReligionName?)` and `ReadOnlyMemory<SettlementView> Settlements`. Today only `Eden.Sim.IMindSnapshot.GodStanding` (not a contract) carries it. Optionally `MemoryView.Generation` for tracing myths in the inspector (the brief kept the contract unchanged; generation is in `Eden.Sim.Memory`). |
 | `ResourceView` for trees/stone/berries in `IWorldSnapshot` | A1 art pass (pre-approved) | See Eden.Game above. |
 | Save-format version bump rules | M8 | `SaveWriter` sections are tagged and versioned; write the compatibility policy down when the first breaking change happens. |

@@ -13,6 +13,9 @@ public sealed class Factions
     public int[] Capital = new int[16];
     public long[] Founded = new long[16];
 
+    /// <summary>M7: the faction's religion id (<see cref="World.Religions"/>), or -1. Saved and hashed in the MYTH section.</summary>
+    public int[] Religion = new int[16];
+
     public bool IsAlive(int id) => id >= 0 && id < Count && Alive[id];
 
     public int Add(string name, int capital, long tick)
@@ -21,9 +24,11 @@ public sealed class Factions
         {
             int n = Count * 2;
             Array.Resize(ref Alive, n); Array.Resize(ref Name, n); Array.Resize(ref Capital, n); Array.Resize(ref Founded, n);
+            Array.Resize(ref Religion, n);
         }
         int id = Count++;
         Alive[id] = true; Name[id] = name; Capital[id] = capital; Founded[id] = tick;
+        Religion[id] = -1;
         return id;
     }
 
@@ -96,6 +101,7 @@ public sealed partial class World
                 int small = big == st.Faction[a] ? st.Faction[b] : st.Faction[a];
                 for (int k = 0; k < st.Count; k++) if (st.Alive[k] && st.Faction[k] == small) st.Faction[k] = big;
                 Factions.Alive[small] = false;
+                if (Factions.Religion[big] < 0) Factions.Religion[big] = Factions.Religion[small]; // M7: a faith survives the merger
                 Chronicle(Tick, "alliance", $"{st.Name[a]} and {st.Name[b]} joined as {Factions.Name[big]}.", 6,
                     [st.Leader[a], st.Leader[b]]);
             }

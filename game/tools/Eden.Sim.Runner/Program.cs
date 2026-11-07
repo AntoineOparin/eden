@@ -10,6 +10,7 @@ using Eden.Sim.Contracts;
 //   ... --seeds 1..20 --years 400 --pace          (K1: stop each seed once bronze casting is known; writing@/bronze@ columns)
 //   ... --set ForgetRatePerYear=0 --set ChatterRate=0.02   (override any SimConfig tunable, for balance passes)
 
+if (Array.IndexOf(args, "--myth") >= 0) return MythReport.Run(args); // M7: --myth [--seed N] [--years Y] [--bless|--strike]
 int seed = 7, years = 60, tail = 15, bench = 0, traceDays = 0;
 bool knowledge = false;
 (int from, int to)? sweep = null;

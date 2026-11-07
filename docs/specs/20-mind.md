@@ -123,6 +123,21 @@ request shapes, repair retry, error mapping, USD pricing) against stub handlers.
 - **Status** is `MindStatus` (provider, model, state Off/Ok/Backoff/DialogueOnly/Exhausted, Neurons and
   USD today, thinking, queued, in flight, completed, failures, last error).
 
+## As built (M7 sim side, 2026-11-06)
+
+- **God standing in the prompt.** `IMindSnapshot.GodStanding(settlementId)` (default null; `WorldSnapshot` fills
+  it from `MindExtras.GodStandings`) gives Favour, Awe, Envy, Fear, the envied/feared neighbour, the stance and
+  the faith. `PromptContext.GodLine` appends one sentence to the persona: "Your people believe the sky favours
+  them." / "Your people fear the sky." / "…has turned against them." / "…do not know what the sky wants of
+  them.", plus "They keep <faith>." and "They envy (fear) <neighbour>, whom the sky favours more." at ≥ 0.2.
+- **Reflection** uses `PromptContext.ReflectionPrompt`: the M5 situation, plus "One of them should be about the
+  sky and what it wants of your people" when the settlement's Awe ≥ 0.3.
+- **Religion counters.** `IntentionMapper.MentionsGod` now calls `Eden.Sim.GodStanding.MentionsGod` (one word
+  list). A god belief reaches the sim as a `BeliefIntention` → importance ≥ 7 belief memory → counts toward
+  its settlement's 40 % religion threshold; the sim also counts them (`World.TotalMindGodBeliefs`).
+  `MindPool.GodBeliefs` is kept for the UI. The manual M7 check (reflections mention the god favourably,
+  neighbours envy or fear) is run after merge with the Mind on.
+
 ## Carried-over items
 
 See `90-backlog.md`; the rows naming your milestone are part of your scope.

@@ -216,6 +216,89 @@ public sealed record SimConfig
     /// <summary>A literate NPC's floor is the written level in the nearest record within this radius (m).</summary>
     public float ForgetRecordRadius { get; init; } = 64f;
 
+    // ---- M7 myth and god tunables (docs/DECISIONS.md, 2026-11-06 "M7 myth") -------------------
+
+    /// <summary>Daily multiplier on every settlement's Favour (half-life ≈ 14 years, about a generation).</summary>
+    public float FavourDecayPerDay { get; init; } = 0.995f;
+
+    /// <summary>Daily multiplier on Awe (half-life ≈ 7 years).</summary>
+    public float AweDecayPerDay { get; init; } = 0.99f;
+
+    /// <summary>A blessing moves Favour this fraction of the way to +1 (a curse, toward −1).</summary>
+    public float BlessFavour { get; init; } = 0.12f;
+    public float BlessAwe { get; init; } = 0.03f;
+
+    /// <summary>Lightning: Awe gained (fraction of the gap to 1) and Favour lost if no rain or blessing follows.</summary>
+    public float LightningAwe { get; init; } = 0.15f;
+    public float LightningWrath { get; init; } = 0.08f;
+
+    /// <summary>Drought: same as lightning, for every settlement.</summary>
+    public float DroughtAwe { get; init; } = 0.1f;
+    public float DroughtWrath { get; init; } = 0.08f;
+
+    /// <summary>Rain: Favour gained by every settlement.</summary>
+    public float RainFavour { get; init; } = 0.06f;
+
+    /// <summary>Spawning, terraforming and gifts from the sky: Awe gained; a whisper: Awe gained in the listener's settlement.</summary>
+    public float WonderAwe { get; init; } = 0.08f;
+    public float WhisperAwe { get; init; } = 0.05f;
+    public float GiftFavour { get; init; } = 0.04f;
+
+    /// <summary>Days after lightning or drought before the Favour loss lands; rain or a blessing in between forgives it.</summary>
+    public int WrathGraceDays { get; init; } = 3;
+
+    /// <summary>Stance thresholds: favourable above +min, fearful at Awe ≥ fear-awe (and not favourable), hostile below −min.</summary>
+    public float StanceFavourMin { get; init; } = 0.15f;
+    public float StanceFearAwe { get; init; } = 0.35f;
+
+    /// <summary>Two settlements stay "in contact" this many days after a cross-settlement talk or a trade/raid trip.</summary>
+    public int ContactDays { get; init; } = 30;
+
+    /// <summary>Envy/Fear move this fraction toward their target per day of contact, and decay by this factor otherwise.</summary>
+    public float EnvyRate { get; init; } = 0.15f;
+    public float EnvyDecayPerDay { get; init; } = 0.98f;
+
+    /// <summary>Envy breeds grievance toward the envied settlement: this × Envy per day.</summary>
+    public float EnvyGrievancePerDay { get; init; } = 0.02f;
+
+    /// <summary>Gossip: the chance a retelling credits the god for a death, raid or discovery is this × the teller's Awe.</summary>
+    public float AttributionMax { get; init; } = 0.3f;
+
+    /// <summary>Gossip copies are retold again up to this many hops.</summary>
+    public int MaxGossipGeneration { get; init; } = 6;
+
+    /// <summary>Daily chance an adult with a god memory forms a belief about the god: rate × (0.5 + piety) × min(1, Awe + |Favour|).</summary>
+    public float GodBeliefRate { get; init; } = 0.08f;
+
+    /// <summary>A god memory older than this many days no longer prompts a belief.</summary>
+    public int GodMemoryDays { get; init; } = 100;
+
+    /// <summary>Religion emerges when this share of a settlement's adults (at least <see cref="ReligionMinAdults"/>) hold a god belief.</summary>
+    public float ReligionThreshold { get; init; } = 0.4f;
+    public int ReligionMinAdults { get; init; } = 3;
+
+    /// <summary>Daily chance a religion crosses to a faction without one, per settlement pair in contact.</summary>
+    public float ReligionSpreadChance { get; init; } = 0.03f;
+
+    /// <summary>A faction whose capital's Favour sign opposes its religion's stance for this many years splits off a new faith.</summary>
+    public float SchismYears { get; init; } = 14f;
+
+    /// <summary>Pray: score multiplier within <see cref="ShrineRange"/> of a finished shrine of one's own settlement.</summary>
+    public float ShrinePrayBoost { get; init; } = 1.6f;
+    public float ShrineRange { get; init; } = 60f;
+
+    /// <summary>Near a shrine, a believer in a religious faction also gets this × piety added to Pray.</summary>
+    public float FaithPrayBonus { get; init; } = 0.1f;
+
+    /// <summary>Extra purpose from praying at a shrine (on top of the M1 +0.35).</summary>
+    public float ShrinePurpose { get; init; } = 0.15f;
+
+    /// <summary>Prayer in a religious faction renews the god belief when the last one is older than this many days.</summary>
+    public int PrayerBeliefDays { get; init; } = 5;
+
+    /// <summary>A religious settlement plans a shrine once it has this many members (and a finished storehouse, and is not hungry).</summary>
+    public int ShrineMinMembers { get; init; } = 20;
+
     public int TicksPerDay => TicksPerHour * HoursPerDay;
     public int TicksPerYear => TicksPerDay * DaysPerYear;
 }

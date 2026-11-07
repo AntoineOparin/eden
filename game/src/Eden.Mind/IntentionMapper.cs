@@ -125,15 +125,12 @@ public static class IntentionMapper
         return new MappedResponse(list, null);
     }
 
-    /// <summary>True when a belief is about the god (religion seed for M7).</summary>
-    public static bool MentionsGod(string text)
-    {
-        foreach (var w in GodWords)
-            if (text.Contains(w, StringComparison.OrdinalIgnoreCase)) return true;
-        return false;
-    }
-
-    private static readonly string[] GodWords = ["god", "voice", "sky", "heaven", "divine", "spirit", "the one above"];
+    /// <summary>
+    /// True when a belief is about the god (religion seed). M7: the word list lives in the sim
+    /// (<see cref="Eden.Sim.GodStanding.GodWords"/>) so the Mind's tag and the sim's religion counters agree: a tagged belief
+    /// reaches the sim as a BeliefIntention, becomes a belief memory, and counts toward its settlement's religion.
+    /// </summary>
+    public static bool MentionsGod(string text) => Eden.Sim.GodStanding.MentionsGod(text);
 
     public static string Clip(string s, int max) => s.Length <= max ? s : s[..(max - 3)].TrimEnd() + "...";
 }
