@@ -66,7 +66,11 @@ fixtures. Do not add a primitive speculatively; add it with the concept that nee
 schema, with a clear error on failure. Saves record which concept set they were created with.
 No hot reload inside a running world.
 
-## 6. Knowledge UI (M5 dialogue/UI pass and M7)
+## 6. Knowledge UI (M5 dialogue/UI pass and M7) — landed in the M7 UI pass and C1 (2026-11-07)
+
+All four bullets are done: the M7 UI pass shipped the Chronicle filters, the knowledge-spread overlay
+and the inspector proficiency bars; C1 replaced the sampled settlement knowledge with the real
+`SettlementDetail` (holder counts, record marker) and added the teacher column from memories.
 
 - Settlement panel: concepts known by anyone in the settlement, with holder counts and
   whether a record exists (M5 UI pass, needs a `SettlementView` in the contract, see backlog).

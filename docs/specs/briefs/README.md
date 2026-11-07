@@ -21,7 +21,7 @@ commit on a named branch, never merge or push; the coordinator merges after
 | `m6-possession.md` | M6 | tag phase4-base | m6-possession | merged 2026-11-07 (63cd7f1) |
 | `m8-scale.md` | M8 | tag phase5-base | m8-scale | in flight |
 | `a2-art-followups.md` | A2 | tag phase5-base | a2-art-followups | in flight |
-| `c1-contract-pass.md` | C1 | tag phase5-base | c1-contract-pass | in flight |
+| `c1-contract-pass.md` | C1 | tag phase5-base | c1-contract-pass | merged 2026-11-07 (2d55986) |
 
 ## Template
 
