@@ -51,6 +51,19 @@ C# names are one-to-one with GDScript, PascalCase). Do not rely on memory of God
 **Definition of done for any change:** `./scripts/check.sh` is green. It runs contract
 validation, `dotnet test`, the Godot headless boot, and the Worker checks.
 
+## Records that must stay current
+
+- `docs/STATUS.md`: append a section when a milestone merges (what, how verified, the numbers);
+  keep the "Now" block at the top true.
+- `docs/DECISIONS.md`: append a dated entry whenever you choose between real alternatives or
+  deviate from a spec. Decision, why, evidence, revisit-when. Never edit old entries; add a new one.
+- `docs/specs/90-backlog.md`: delete the rows you resolve, add rows for what you leave out.
+- `docs/specs/briefs/`: the brief an agent received is stored there verbatim before it is launched,
+  so a later session can see exactly what was asked.
+- Specs 10–50 describe the target; when reality differs, fix the spec in the same PR and say so.
+- Facts that live only in a chat or an agent report are lost. If it mattered, it goes in one of the
+  files above.
+
 ## Hard rules
 
 1. **The simulation never waits on an LLM.** Every NPC runs on rules every tick. LLM output

@@ -1,3 +1,24 @@
+> **Status of this document.** This is the plan Antoine approved on 2026-11-06, kept verbatim below
+> as the reference. What changed since approval is listed here, and the living records are:
+> `docs/STATUS.md` (what is merged and the numbers), `docs/DECISIONS.md` (why things are the way they
+> are), `docs/specs/90-backlog.md` (carried-over work), `docs/specs/51-knowledge-roadmap.md`,
+> and `docs/specs/briefs/` (the exact briefs each milestone agent received).
+>
+> **Changes since approval**
+> - .NET **10** (not 8) is the only SDK/runtime installed; all projects target `net10.0`.
+> - Default think model is **`@cf/google/gemma-4-26b-a4b-it`**, not qwen3 (deprecated 2026-11-20). See DECISIONS.
+> - Contracts gained `ISimHost.cs` (commands, time scale, possession, sim-thread lifecycle),
+>   `common.schema.json`, `BiomeId` and the heightmap layout on `IWorldSnapshot`, and the on-request
+>   semantics of `TryGetNpcDetail`. `SetThinkingCommand` is being added by M5.
+> - The Worker is stateless, so it reports per-request `X-Eden-Neurons-Cost` (and `X-Eden-Usd-Cost`
+>   for paid providers); the client sums them. There is no "remaining" header.
+> - `Eden.Sim.Tests` is xUnit 2.x on VSTest (gdUnit4 forces it); `Eden.Game.Tests` is a mirror Godot
+>   project. See DECISIONS.
+> - Knowledge gates build/farm/craft/trade/raid/settle/invent until a concept unlocks them.
+> - Milestones M0–M4 and the Worker are merged; "First concrete steps once approved" are done.
+>   Population reaches ~2,000 by year 120 on most seeds, so the M8 scale pass matters earlier than planned.
+> - Animals are resource herds, not agents, until M3/M8 revisit (backlog).
+
 # Eden: a WorldBox-style god sim with agentic NPCs
 
 Working title `eden` (world starts from two people). Rename freely.

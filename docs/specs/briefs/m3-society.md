@@ -1,0 +1,27 @@
+# Brief: M3 society (launched 2026-11-06, base 50f9c5a, branch m3-society)
+
+You are working in an isolated git worktree of the Eden repo (origin at ~/Projects/eden, base commit 50f9c5a on main, which already contains M0, M1 sim core, M2 render shell and the brain Worker). Your working directory is the worktree root; do all work there.
+
+Read AGENTS.md, docs/specs/10-sim-core.md (section "Society (M3)" and the M3 acceptance tests), docs/specs/90-backlog.md (rows marked M3 are yours), and the contracts in docs/specs/contracts/ (ISimHost.cs, IWorldSnapshot.cs, Intention.cs). Then read the existing Eden.Sim code in game/src/Eden.Sim/ before writing anything: World.cs, World.Behaviour.cs, World.Life.cs, World.Commands.cs, World.Persistence.cs, Npcs.cs, ActionScorer.cs, ResourceNodes.cs, Relationships.cs, Memory.cs, EventBus.cs, SaveWriter.cs/SaveReader.cs, and the tests in game/tests/Eden.Sim.Tests/.
+
+Goal: milestone M3 "society": households -> settlements (clustering of homes every in-game day) -> factions; jobs assigned from settlement deficits; farming (farm plots, planting/harvest by season); storage buildings with shared stock; building construction by NPCs (ActionKind.Build with progress, emitted as BuildingView in the snapshot); trade between settlements with surplus/deficit within travel range; leadership from relationship-graph centrality; grievance-driven raids (ActionKind.Raid) and conflict; Chronicle entries for settlement founded, leader chosen, trade, raid. Also the M3 backlog rows: traits blended with upbringing (household), grid pathing (A* on the terrain cost field, so NPCs can reach targets behind a coast; sim truth, no NavigationServer3D), and lift the food-limited population plateau through farming/storage/trade rather than by retuning the M1 population test.
+
+Building kinds you define (keep these exact kebab-case ids, another agent is authoring data files against them in parallel): hut, storehouse, farm-plot, well, kiln, workshop, shrine, archive, wall, dock. Only hut, storehouse, farm-plot, well are constructible in M3 by default; the others become constructible through knowledge effects (unlockBuilding) in M4. Expose a small `BuildingKinds` registry (id -> cost, footprint, capacity) that M4 can call `Unlock(npcOrSettlement, id)` on; a stub that no-ops for unknown ids is fine.
+
+File ownership, because an M4 knowledge agent works in parallel inside Eden.Sim:
+- You own new files: World.Society.cs, Households.cs, Settlements.cs, Factions.cs, Jobs.cs, Buildings.cs (and BuildingKinds), Farming.cs, Storage.cs, Trade.cs, Conflict.cs, Pathfinding.cs, plus tests SocietyTests.cs, PathfindingTests.cs, TradeConflictTests.cs, FarmingTests.cs.
+- M4 owns: ConceptGraph.cs, Knowledge.cs, EffectApplier.cs, World.Knowledge.cs, game/data/**, docs/specs/50-knowledge-data.md, and tests named *Knowledge*/*Concept*. Do not create or edit those.
+- Shared files you may edit only with small, additive changes (new fields, a hook call, a new save section appended at the end, a new SimConfig tunable): World.cs, World.Behaviour.cs, World.Life.cs, World.Commands.cs, World.Persistence.cs, Npcs.cs, ActionScorer.cs, SimConfig.cs, SaveWriter.cs, SaveReader.cs, WorldSnapshot.cs, Memory.cs, EventBus.cs. Prefer adding a partial-class file with a hook method over rewriting existing methods. Do not reformat or reorder existing code.
+- Do not touch game/src/Eden.Game, game/src/Eden.Mind, game/tests/Eden.Game.Tests, brain/, or docs/specs/contracts/. If you need a snapshot field, do NOT add it; list it in your report.
+
+Hard rules: deterministic (only Rng), no Godot references, no allocations on the tick hot path (buildings and settlements update on day/hour boundaries), never block. Save/load must round-trip with equal StateHash including all new state; add sections, do not change existing ones. Keep the non-Slow unit suite under about 2 s; tag anything longer [Trait("Category","Slow")].
+
+Acceptance (from the spec): across seeds 1..20 with 20 generations, two or more settlements emerge from a 2-person start on at least 50% of seeds, and at least one trade and one raid Chronicle entry appear on at least 50% of seeds. Encode that as a Slow test with ratios. Extend game/tools/Eden.Sim.Runner so `--seeds 1..20 --years 120` prints per seed: final pop, settlements, trades, raids, leaders. Keep all existing tests passing.
+
+Tooling: .NET 10 only (net10.0), `godot` on PATH is a wrapper over the real binary, gdUnit4 needs GODOT_BIN=/Applications/Godot_mono.app/Contents/MacOS/Godot (scripts/check.sh sets it). Do not spend money or deploy anything.
+
+Definition of done: `cd game && dotnet test Eden.sln` green, `./scripts/check.sh` green from the worktree root, runner sweep table in your report. Commit on a branch named m3-society with a message ending in "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>". Do not merge or push. In docs/specs/90-backlog.md delete the M3 rows you resolved (edit only your rows).
+
+Final report: files added/changed (mark shared-file edits explicitly with the hook you added), test counts, the sweep table, what you could not finish and why, any contract field you need.
+
+Mid-run addendum (after M4 finished first): knowledge will gate build/farm/trade/raid/settle after the merge, so use the 20-generation horizon; give BuildingKinds `Unlock(int id, string buildingId)`; buildings need stable ids and a destroyed event; append save sections after MISC; expose `World.YieldFactor` as a `Func<int,string,float>` defaulting to 1. All five were accommodated.
