@@ -22,8 +22,26 @@ public static class KnowledgeRules
     /// <summary>Weight of one eligible concept in a discovery roll: easy concepts come first.</summary>
     public static float DiscoveryWeight(float difficulty) => Math.Max(0.02f, 1f - difficulty);
 
+    /// <summary>
+    /// K1: the same weight raised to an integer power, so hard concepts are rarer by orders of magnitude rather
+    /// than by a factor of a few (exponent 1 is the M4 curve).
+    /// </summary>
+    public static float DiscoveryWeight(float difficulty, int exponent)
+    {
+        float b = DiscoveryWeight(difficulty), w = b;
+        for (int i = 1; i < exponent; i++) w *= b;
+        return w;
+    }
+
     /// <summary>yieldMod contribution: full factor at proficiency 1, none at 0.</summary>
     public static float YieldAt(float factor, float proficiency) => 1f + (factor - 1f) * proficiency;
+
+    /// <summary>
+    /// Forgetting, one day of it: Δp = −(ratePerYear / daysPerYear) × (p − floor). Never below the floor (the
+    /// written level of a readable record), never above p.
+    /// </summary>
+    public static float Forget(float p, float floor, float ratePerYear, int daysPerYear)
+        => p <= floor ? p : Math.Max(floor, p - ratePerYear / Math.Max(1, daysPerYear) * (p - floor));
 }
 
 /// <summary>
@@ -51,6 +69,13 @@ public sealed class KnowledgeState
     public int[] TargetTool = new int[64];
     public int[] TargetNode = new int[64];
 
+    /// <summary>
+    /// K1 forgetting: per slot, per concept index, the tick the NPC last practised (or gained) the concept; -1 when
+    /// it does not hold it. Arrays are allocated the first time a slot learns anything and reused when the slot is.
+    /// Saved in KNW2.
+    /// </summary>
+    public long[]?[] LastPractised = new long[]?[64];
+
     public void EnsureSlots(int slot)
     {
         if (slot < UnlockedActions.Length) return;
@@ -64,6 +89,23 @@ public sealed class KnowledgeState
         Array.Resize(ref TargetConcept, n);
         Array.Resize(ref TargetTool, n);
         Array.Resize(ref TargetNode, n);
+        Array.Resize(ref LastPractised, n);
+    }
+
+    /// <summary>Record practice of concept <paramref name="concept"/> at <paramref name="tick"/>.</summary>
+    public void Touch(int slot, int concept, int conceptCount, long tick)
+    {
+        EnsureSlots(slot);
+        var a = LastPractised[slot];
+        if (a is null || concept >= a.Length)
+        {
+            int len = Math.Max(conceptCount, concept + 1);
+            int old = a?.Length ?? 0;
+            Array.Resize(ref a, len);
+            for (int i = old; i < len; i++) a[i] = -1;
+            LastPractised[slot] = a;
+        }
+        a[concept] = tick;
     }
 
     public void ResetSlot(int slot)
@@ -74,5 +116,6 @@ public sealed class KnowledgeState
         Owned[slot] = 0;
         Candidates[slot] = 0;
         TargetSlot[slot] = TargetConcept[slot] = TargetTool[slot] = TargetNode[slot] = -1;
+        if (LastPractised[slot] is { } lp) Array.Fill(lp, -1L);
     }
 }

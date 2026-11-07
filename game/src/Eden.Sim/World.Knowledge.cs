@@ -55,7 +55,9 @@ public sealed partial class World
     private void AfterKnowledgeSet(int slot, string conceptId, float before)
     {
         if (_knowledgeLoading || Graph is null || !Graph.TryIndex(conceptId, out int i)) return;
-        Bookkeep(slot, i, before, Proficiency(slot, conceptId));
+        float after = Proficiency(slot, conceptId);
+        if (after > before) KnowledgeState.Touch(slot, i, Graph.Count, Tick);
+        Bookkeep(slot, i, before, after);
     }
 
     /// <summary>Kill: the dead take their knowledge with them unless someone else has it or it is written down.</summary>
@@ -291,7 +293,9 @@ public sealed partial class World
         k.TryGetValue(id, out float before);
         float after = Math.Clamp(value, 0f, 1f);
         k[id] = after;
-        if (!_knowledgeLoading) Bookkeep(s, i, before, after);
+        if (_knowledgeLoading) return;
+        if (after > before) KnowledgeState.Touch(s, i, Graph.Count, Tick);
+        Bookkeep(s, i, before, after);
     }
 
     private void Bookkeep(int s, int i, float before, float after)
@@ -328,14 +332,18 @@ public sealed partial class World
         for (int j = 0; j < list.Length; j++)
         {
             int i = list[j];
-            if (k.TryGetValue(Graph[i].Id, out float p) && p > 0 && p < 1f) SetProficiency(s, i, KnowledgeRules.Hone(p, rate));
+            if (!k.TryGetValue(Graph[i].Id, out float p) || p <= 0) continue;
+            KnowledgeState.Touch(s, i, Graph.Count, Tick);
+            if (p < 1f) SetProficiency(s, i, KnowledgeRules.Hone(p, rate));
         }
     }
 
     /// <summary>Explaining something is practice too: the speaker hones what they talked about.</summary>
     private void Practise(int s, int i, float p)
     {
-        if (p > 0 && p < 1f) SetProficiency(s, i, KnowledgeRules.Hone(p, Config.HoneRate));
+        if (p <= 0) return;
+        KnowledgeState.Touch(s, i, Graph.Count, Tick);
+        if (p < 1f) SetProficiency(s, i, KnowledgeRules.Hone(p, Config.HoneRate));
     }
 
     private void Chatter(int speaker, int listener)
@@ -463,7 +471,7 @@ public sealed partial class World
         for (int i = 0; i < Graph.Count; i++)
         {
             if (!Eligible(k, i, th)) continue;
-            total += KnowledgeRules.DiscoveryWeight(Graph[i].Difficulty);
+            total += KnowledgeRules.DiscoveryWeight(Graph[i].Difficulty, cfg.DiscoveryDifficultyExponent);
             eligible++;
         }
         KnowledgeState.EnsureSlots(s);
@@ -477,7 +485,7 @@ public sealed partial class World
         {
             if (!Eligible(k, i, th)) continue;
             pick = i;
-            r -= KnowledgeRules.DiscoveryWeight(Graph[i].Difficulty);
+            r -= KnowledgeRules.DiscoveryWeight(Graph[i].Difficulty, cfg.DiscoveryDifficultyExponent);
             if (r < 0) break;
         }
         if (pick >= 0) Discover(s, pick);
@@ -509,6 +517,52 @@ public sealed partial class World
             Apprentice(s, Npcs.Father[s]);
         }
         UseRecords(s);
+        Forget(s);
+    }
+
+    // ---- forgetting (K1, 51-knowledge-roadmap.md item 1) ---------------------------------------
+
+    /// <summary>
+    /// Daily: every concept this NPC has not practised for <see cref="SimConfig.ForgetGraceYears"/> decays toward its
+    /// floor, the written level in the nearest record the NPC can read (0 if none). Effects switch off when it
+    /// falls below the unlock level; under <see cref="SimConfig.ForgetDropBelow"/> it is forgotten outright, and if
+    /// that was the world's last knowledge of it, the Chronicle says so. Walks a per-slot array, no allocations.
+    /// </summary>
+    private void Forget(int s)
+    {
+        var cfg = Config;
+        if (cfg.ForgetRatePerYear <= 0) return;
+        var ks = KnowledgeState;
+        if (s >= ks.LastPractised.Length || ks.LastPractised[s] is not { } last) return;
+        var k = KnowledgeOf(s);
+        if (k is null || k.Count == 0) return;
+        long cutoff = Tick - (long)(cfg.ForgetGraceYears * cfg.TicksPerYear);
+        WrittenRecord? rec = null;
+        bool looked = false;
+        int count = Math.Min(last.Length, Graph.Count);
+        for (int i = 0; i < count; i++)
+        {
+            long t = last[i];
+            if (t < 0 || t > cutoff) continue;
+            string id = Graph[i].Id;
+            float p = Prof(k, id);
+            if (p <= 0) { last[i] = -1; continue; }
+            if (!looked)
+            {
+                looked = true;
+                bool literate = Prof(k, WritingId) >= cfg.UnlockProficiency || Prof(k, PictographsId) >= cfg.DiscoveryThreshold;
+                if (literate) rec = Records.Nearest(Npcs.X[s], Npcs.Z[s], cfg.ForgetRecordRadius);
+            }
+            float floor = rec is not null && rec.Entries.TryGetValue(id, out float written) ? written : 0f;
+            if (p <= floor) continue;
+            float next = KnowledgeRules.Forget(p, floor, cfg.ForgetRatePerYear, cfg.DaysPerYear);
+            if (next < cfg.ForgetDropBelow && floor < cfg.ForgetDropBelow) next = 0f;
+            SetProficiency(s, i, next);
+            if (next > 0) continue;
+            last[i] = -1;
+            if (!Graph.KnownAnywhere(i))
+                Chronicle(Tick, "knowledge-lost", $"{Npcs.Name[s]} forgot {Lower(Graph[i].Name)}, and no one else remembered it.", 6, [Npcs.IdOf(s)]);
+        }
     }
 
     /// <summary>Tools wear out, so crafting (and the concepts it hones) never stops for good.</summary>
@@ -625,6 +679,31 @@ public sealed partial class World
             w.Write(has ? ks.TargetTool[s] : -1);
             w.Write(has ? ks.TargetNode[s] : -1);
         }
+        WriteForgetting(w);
+    }
+
+    /// <summary>KNW2 tail block (K1, version 1): per living NPC, the last-practised tick of each concept it holds.</summary>
+    private const int ForgettingBlockVersion = 1;
+
+    private void WriteForgetting(BinaryWriter w)
+    {
+        var ks = KnowledgeState;
+        w.Write(ForgettingBlockVersion);
+        for (int s = 0; s < Npcs.HighWater; s++)
+        {
+            if (!Npcs.Alive[s]) continue;
+            var last = s < ks.LastPractised.Length ? ks.LastPractised[s] : null;
+            int n = 0;
+            int count = last is null ? 0 : Math.Min(last.Length, Graph.Count);
+            for (int i = 0; i < count; i++) if (last![i] >= 0) n++;
+            w.Write(n);
+            for (int i = 0; i < count; i++)
+            {
+                if (last![i] < 0) continue;
+                w.Write(Graph[i].Id);
+                w.Write(last[i]);
+            }
+        }
     }
 
     /// <summary>ReadBody, after every section: rebuild the graph in saved order, then the derived counters and masks.</summary>
@@ -638,6 +717,7 @@ public sealed partial class World
         for (int s = 0; s < ks.Owned.Length; s++) ks.ResetSlot(s);
         Records.Clear();
         var ownedTools = new List<(int slot, string tool)>();
+        List<(int slot, string concept, long tick)>? practised = null;
 
         if (section is not null)
         {
@@ -661,6 +741,19 @@ public sealed partial class World
                 ks.TargetConcept[s] = r.ReadInt32();
                 ks.TargetTool[s] = r.ReadInt32();
                 ks.TargetNode[s] = r.ReadInt32();
+            }
+            // K1 block, appended additively: saves written before it have none (every holder starts its grace now).
+            if (r.BaseStream.Position < r.BaseStream.Length)
+            {
+                int version = r.ReadInt32();
+                if (version > ForgettingBlockVersion) throw new InvalidDataException($"KNW2 forgetting block version {version} is newer than this build");
+                practised = new List<(int, string, long)>();
+                for (int s = 0; s < Npcs.HighWater; s++)
+                {
+                    if (!Npcs.Alive[s]) continue;
+                    int m = r.ReadInt32();
+                    for (int j = 0; j < m; j++) practised.Add((s, r.ReadString(), r.ReadInt64()));
+                }
             }
         }
         else
@@ -700,9 +793,16 @@ public sealed partial class World
             var k = KnowledgeOf(s);
             if (k is null) continue;
             for (int i = 0; i < Graph.Count; i++)
-                if (Prof(k, Graph[i].Id) > 0) Graph.AddHolder(i, 1);
+            {
+                if (Prof(k, Graph[i].Id) <= 0) continue;
+                Graph.AddHolder(i, 1);
+                if (practised is null) ks.Touch(s, i, Graph.Count, Tick);
+            }
             EffectApplier.RecomputeUnlocks(this, s);
         }
+        if (practised is not null)
+            foreach (var (slot, concept, tick) in practised)
+                if (Graph.TryIndex(concept, out int ci)) ks.Touch(slot, ci, Graph.Count, tick);
         _knowledgeLoading = false;
     }
 
@@ -726,6 +826,9 @@ public sealed partial class World
             h = Hash.Mix(h, (ulong)ks.TargetConcept[s]);
             h = Hash.Mix(h, (ulong)ks.TargetTool[s]);
             h = Hash.Mix(h, (ulong)ks.TargetNode[s]);
+            if (ks.LastPractised[s] is { } last)
+                for (int i = 0; i < last.Length && i < Graph.Count; i++)
+                    if (last[i] >= 0) h = Hash.Mix(h, Hash.Combine((ulong)i, (ulong)last[i]));
         }
         return h;
     }

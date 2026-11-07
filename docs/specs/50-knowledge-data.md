@@ -94,16 +94,27 @@ Proficiency is 0..1 per concept per NPC (`Dictionary<string, float>`, shown in `
   (`writing` ≥ 0.3, or `pictographs` ≥ 0.6) within 16 m read two entries a day. M3 binds sites to
   archive buildings with `World.AddRecordSite(x, z, buildingId)` / `DestroyRecordSite(id)`.
 - **Discovery:** every 60 ticks (staggered) an adult rolls for the concepts it does not know whose
-  prerequisites it has all at ≥ 0.6: chance `curiosity × Σ(1 − difficulty) × 1e-4 × 60`, the pick
-  weighted by ease. The Invent action rolls ×30. First discoveries, and rediscoveries of lost
+  prerequisites it has all at ≥ 0.6: chance `curiosity × Σ w × 1e-4 × 60` with
+  `w = max(0.02, 1 − difficulty)^DiscoveryDifficultyExponent` (3 since K1), the pick weighted by `w`. The Invent action rolls ×30. First discoveries, and rediscoveries of lost
   concepts, write `discovery` Chronicle entries; a discoverer starts at 0.3.
 - **Loss:** `ConceptGraph.KnownAnywhere(id)` is true while a living NPC knows the concept or a record
   holds it. When the last knower of an unwritten concept dies, a `knowledge-lost` Chronicle entry is
   written and the concept is gone until someone rediscovers it.
+- **Forgetting (K1):** every concept an NPC holds carries the tick it was last practised (honed by an
+  action, explained in chatter or a lesson, or raised by learning or reading). Once a day, a concept
+  not practised for `ForgetGraceYears` (2) decays `Δp = −ForgetRatePerYear / DaysPerYear × (p − floor)`
+  (0.05 a year). `floor` is the written level of that concept in the nearest record within
+  `ForgetRecordRadius` (64 m), for literate NPCs only; 0 otherwise. Effects switch off when p falls
+  under `UnlockProficiency`; under `ForgetDropBelow` (0.05) the concept is forgotten (p = 0, eligible
+  for rediscovery), and if nobody else knows it and nothing holds it in writing, a `knowledge-lost`
+  entry is written. Last-practised ticks are saved in KNW2 (an additive, versioned tail block; older
+  saves start every holder's grace at load).
 
-Every tunable is in `SimConfig` (M4 block). Seed 1 reaches ~70 concepts by year 50, writing around
-year 80 and 92 of 95 by year 200 (`dotnet run --project game/tools/Eden.Sim.Runner -- --seed 1
---years 200 --knowledge`).
+Every tunable is in `SimConfig` (M4 block, K1 additions at its end). Since K1 (seeds 1..20, headless):
+the median seed knows ~56 concepts by year 40, writing in year ~190 (123–350) and bronze casting in year
+~385 (204–479; 7 of 18 living seeds not by year 500). `dotnet run -c Release --project
+game/tools/Eden.Sim.Runner -- --seeds 1..20 --years 500 --pace` prints the sweep, `--seed 1 --years 200
+--knowledge` one seed's decade-by-decade timeline.
 
 Anything else is rejected by schema and by `IntentionValidator`. New primitives require a
 change to `concepts.schema.json`, `ConceptEffectKind` in `Intention.cs`, `EffectApplier` in
@@ -113,11 +124,15 @@ Eden.Sim, and the Worker prompt, in one PR.
 
 - `id` kebab-case, stable forever (saves reference it). `name` ≤ 48 chars, `description` one
   or two sentences in plain words an NPC could say.
-- `difficulty` is the discovery hardness: 0.1 fire, 0.3 pottery, 0.5 irrigation, 0.7 bronze,
-  0.9 writing. Discovery chance per tick ≈ `curiosity × (1 − difficulty) × 1e-4` once all
-  prerequisites are ≥ 0.6.
-- ≤ 6 prerequisites, no cycles (the loader rejects them). Keep the graph wide, not deep: a
-  2-person start must reach something new within a couple of generations.
+- `difficulty` is the discovery hardness: 0.1 fire, 0.3 pottery, 0.5 irrigation, 0.9 writing,
+  0.93–0.97 for the metal steps. Discovery chance per tick ≈ `curiosity × (1 − difficulty)³ × 1e-4`
+  once all prerequisites are ≥ 0.6, so 0.3 → 0.34, 0.6 → 0.064, 0.9 → 0.001, 0.94 → 0.0002: each
+  0.01 near the top is worth decades once a population has boomed (see DECISIONS, K1).
+- ≤ 6 prerequisites, no cycles (the loader rejects them). Keep the early game wide: nothing within
+  two steps of the starters needs more than two prerequisites, so a 2-person start reaches something
+  new within a couple of generations. Late-era concepts (bronze, iron, smithing, writing, law-codes,
+  astronomy and their neighbours) take 3 to 5 prerequisites and sit at least five steps deep
+  (`ConceptGraphTests.Late_eras_sit_behind_deep_prerequisite_chains_and_the_early_game_stays_wide`).
 - Resource, building and tool ids must exist in `game/data/{resources,buildings,tools}.json`
   (loader cross-checks). Add them in the same PR.
 - ~80 concepts at M4 across survival, food, craft, building, social, belief, metal, writing.

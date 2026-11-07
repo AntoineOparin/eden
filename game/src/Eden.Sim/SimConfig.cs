@@ -197,6 +197,25 @@ public sealed record SimConfig
     /// <summary>Knowledge-gated actions (build, farm, craft, teach, learn, trade, raid, settle, invent) score 0 until unlocked.</summary>
     public bool KnowledgeGatesActions { get; init; } = true;
 
+    // ---- K1 pace (docs/specs/51-knowledge-roadmap.md item 2) ----
+
+    /// <summary>Discovery weight of a concept is max(0.02, 1 − difficulty) to this power (1 = the M4 linear curve).</summary>
+    public int DiscoveryDifficultyExponent { get; init; } = 3;
+
+    // ---- K1 forgetting (docs/specs/51-knowledge-roadmap.md item 1) ----
+
+    /// <summary>Unpractised concepts decay daily: Δp = −rate/DaysPerYear × (p − floor). 0 disables forgetting.</summary>
+    public float ForgetRatePerYear { get; init; } = 0.05f;
+
+    /// <summary>No decay until this many years have passed since the NPC last practised (or gained) the concept.</summary>
+    public float ForgetGraceYears { get; init; } = 2f;
+
+    /// <summary>Below this proficiency an unpractised concept is gone (set to 0) unless a record floors it higher.</summary>
+    public float ForgetDropBelow { get; init; } = 0.05f;
+
+    /// <summary>A literate NPC's floor is the written level in the nearest record within this radius (m).</summary>
+    public float ForgetRecordRadius { get; init; } = 64f;
+
     public int TicksPerDay => TicksPerHour * HoursPerDay;
     public int TicksPerYear => TicksPerDay * DaysPerYear;
 }

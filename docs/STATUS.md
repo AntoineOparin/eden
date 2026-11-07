@@ -8,11 +8,12 @@ merge; keep the "Now" block at the top current. Numbers here are measured on Ant
 
 - **Merged on main:** M0 tooling + contracts, M1 sim core, M2 render shell, brain Worker (M5-ready),
   M3 society, M4 knowledge, M5 minds. See git log for the head.
-- **In flight:** nothing.
+- **In flight:** K1 knowledge balance on branch `k1-knowledge-balance` (forgetting, pace, graph depth;
+  section below), awaiting merge.
 - **Next per plan:** balance pass (knowledge forgetting + pace, `specs/51-knowledge-roadmap.md`),
   then M6 possession and M7 myth in parallel, then M8 scale. Worker deploy needs Antoine's go-ahead.
 - **Checks:** `./scripts/check.sh` = contracts (5 schemas, 19 fixtures, concepts.json 95 concepts),
-  207 Eden.Sim tests (~70 s, two Slow 20-seed tests dominate), 23 Eden.Game gdUnit4 tests,
+  218 Eden.Sim tests on the K1 branch (the M3 Slow society test now dominates, see K1), 23 Eden.Game gdUnit4 tests,
   headless boot, 85 Worker tests.
 - **Known slow spot:** the Sim suite's two Slow tests take about a minute together. Split them
   behind a `Category=Slow` filter if it starts to hurt.
@@ -104,3 +105,59 @@ call, most of it background thoughts during the fast-forward. Dialogue round tri
 **Not verified here.** A pasted Anthropic key (no key; covered by stub tests and the encrypted
 settings round trip). The budget cap against the live Worker (covered by `MindPoolTests`). The Worker
 is not deployed.
+
+## 2026-11-06 — K1 knowledge balance (branch k1-knowledge-balance)
+
+**What.** Roadmap items 1–3 (`specs/51-knowledge-roadmap.md`). (1) Forgetting: unpractised concepts
+decay toward the written floor after a 2-year grace and are forgotten under 0.05; last-practised ticks
+are saved in a versioned tail block of KNW2. (2) Pace: era targets (median writing year 150–250, bronze
+300–450, nothing before half of each lower bound), reached with a cubic discovery-difficulty curve
+(`DiscoveryDifficultyExponent` = 3) and harder late steps; the global rates are unchanged. The runner's
+`--seeds` sweep gains `writing@`, `bronze@` and `known` columns, plus `--pace` (stop a seed at bronze)
+and `--set Name=value` (override any SimConfig tunable). (3) Graph depth: 14 late concepts now take 3–5
+prerequisites; the longest chain is asserted ≥ 5. See the three DECISIONS entries "K1: …".
+
+**How verified.**
+- Eden.Sim.Tests: 218 (was 207): `ForgettingTests` (8),
+  `ConceptGraphTests.Late_eras_sit_behind_deep_prerequisite_chains_and_the_early_game_stays_wide`,
+  `PacingTests` (2, Slow). The non-Slow suite is as fast as before. The always-on pacing test runs seeds
+  1..20 to year 40 in ~8 s in Debug (median 56 concepts known, no copper, writing or bronze anywhere).
+  The in-band test needs `EDEN_PACE_FULL=1` (about 40 minutes of simulation) and returns early
+  otherwise; the sweep below is its evidence.
+- M1 `PopulationTests` unchanged and green (18/20 reach 50 in years 34–84; seeds 10 and 16 die out).
+  M3 Slow society test unchanged and green (18/20 seeds get ≥ 2 settlements, a trade and a raid; first
+  raid now year 62–147, was 58–93, so the test runs longer).
+- `node scripts/validate-contracts.mjs`: concepts.json 95 concepts, 0 failures.
+
+**Numbers.** Sweep seeds 1..20, Release build. Before = the merge-base behaviour (old concepts.json,
+`--set ForgetRatePerYear=0`, `--years 150`). After = this branch, `--years 500 --pace` (a seed stops
+when bronze is first known; `-` = not by year 500). Seeds 10 and 16 die out in both.
+
+| seed | writing@ before | bronze@ before | writing@ after | bronze@ after |
+|---|---|---|---|---|
+| 1 | 58 | 92 | 163 | 252 |
+| 2 | 71 | 94 | 138 | 291 |
+| 3 | 64 | 84 | 123 | 340 |
+| 4 | 61 | 80 | 198 | - |
+| 5 | 68 | 95 | 283 | 479 |
+| 6 | 69 | 89 | 289 | 374 |
+| 7 | 61 | 94 | 228 | 396 |
+| 8 | 57 | 78 | 144 | 238 |
+| 9 | 66 | 89 | 187 | - |
+| 10 | died | died | died | died |
+| 11 | 65 | 86 | 190 | 262 |
+| 12 | 68 | 90 | 350 | - |
+| 13 | 71 | 91 | 256 | - |
+| 14 | 108 | 150 | 331 | - |
+| 15 | 60 | 98 | 191 | - |
+| 16 | died | died | died | died |
+| 17 | 75 | 102 | 150 | - |
+| 18 | 59 | 87 | 163 | 231 |
+| 19 | 57 | 86 | 230 | 242 |
+| 20 | 63 | 83 | 140 | 204 |
+
+Median over the 18 living seeds: writing year 64 → 190 (range 57–108 → 123–350); bronze 90 → about
+385 (range 78–150 → 204–479, and 7 of 18 seeds have no bronze by year 500). Seed 2 after K1: 57 concepts
+by year 40, pictographs about year 90, writing in year 138, copper still unfound at year 140. Population
+has the same shape (about 1,400–2,200 from year 100): the boom still comes from farming. Bronze is
+bimodal (about 200–260, or 340 and later); see the backlog row.

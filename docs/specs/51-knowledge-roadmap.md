@@ -5,7 +5,12 @@ M5. Items 1 and 2 form one balance pass right after M5 (LLM inventions change th
 tune once). Items 3 to 6 attach to the milestones named. Rows also appear in `90-backlog.md`;
 delete both when done.
 
-## 1. Forgetting (balance pass after M5)
+## 1. Forgetting (balance pass after M5) — landed in K1 (2026-11-06)
+
+**Landed.** As specified, plus `ForgetDropBelow` (0.05: below it the concept is forgotten and can be
+rediscovered) and `ForgetRecordRadius` (64 m; the floor applies to literate NPCs only). Runs in the
+daily knowledge pass; last-practised ticks are saved in KNW2. Details in `50-knowledge-data.md`
+("Forgetting") and DECISIONS "K1: forgetting details". Tests: `ForgettingTests`.
 
 Today knowledge is lost only when every holder dies with no written record. Add slow
 proficiency decay for concepts not practised: `Δp = −ForgetRatePerYear × (p − floor)` where
@@ -16,7 +21,15 @@ village that stops farming for generations really does lose farming. Tunables:
 practice, start 2). Tests: decay without practice, no decay with practice, record as floor,
 determinism, save round-trip. Keep the M4 "dies with its holders" test passing.
 
-## 2. Pace (balance pass after M5)
+## 2. Pace (balance pass after M5) — landed in K1 (2026-11-06)
+
+**Landed.** Targets: median writing year 150–250, bronze 300–450, nothing before half of each lower
+bound (DECISIONS "K1: era targets"). Tuned with a cubic discovery-difficulty curve
+(`DiscoveryDifficultyExponent` 3) and harder late steps rather than the global rates (DECISIONS "K1:
+pace tunables"). Runner: `--seeds 1..20 --years 500 --pace` prints `writing@`, `bronze@` and `known`;
+`--set Name=value` overrides any SimConfig tunable. `PacingTests` (Slow): a 40-year early-game check
+that check.sh runs, and the in-band check behind `EDEN_PACE_FULL=1`. Not done: tuning with live LLM
+inventions (assumed ≈ 10 % extra pressure; backlog).
 
 Seed 1 knows 69 of 95 concepts by year 40 and all 95 by year 130. Decide the target era
 length first (suggestion: writing around year 150 to 250 on a median seed, metals after 300),
@@ -25,7 +38,13 @@ per-concept `difficulty` values, with LLM inventions enabled. Add a runner colum
 "writing@" and "bronze@" to the seed sweep so the pass is measurable. Do not change the
 M4 acceptance tests; add a Slow pacing test with ranges once the targets are agreed.
 
-## 3. Graph depth (M8 content pass, or with 2)
+## 3. Graph depth (M8 content pass, or with 2) — landed in K1 (2026-11-06)
+
+**Landed.** 3–5 prerequisites for copper-smelting, metalworking, bronze-casting, iron-smelting,
+smithing, metal-trade, writing, record-keeping, literacy, law-codes, scripture, mathematics,
+astronomy and mapmaking; early game unchanged. `ConceptGraphTests` asserts the longest chain ≥ 5, the
+named late concepts have 3–5 prerequisites, depth ≥ 5 and difficulty ≥ 0.7, nothing within two steps
+of the starters needs more than two, and everything stays reachable.
 
 No concept has more than two prerequisites, by design for the two-person start. Late eras
 need bottlenecks: give bronze, iron, writing, law-codes, astronomy and smithing chains of 3 to

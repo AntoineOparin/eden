@@ -7,6 +7,8 @@ using Eden.Sim.Contracts;
 //   dotnet run --project game/tools/Eden.Sim.Runner -- --seeds 1..20 --years 60     (one summary line per seed)
 //   dotnet run --project game/tools/Eden.Sim.Runner -- --bench 5000                 (ms per tick at N NPCs)
 //   dotnet run --project game/tools/Eden.Sim.Runner -- --seed 7 --years 200 --knowledge (concepts known anywhere per decade)
+//   ... --seeds 1..20 --years 400 --pace          (K1: stop each seed once bronze casting is known; writing@/bronze@ columns)
+//   ... --set ForgetRatePerYear=0 --set ChatterRate=0.02   (override any SimConfig tunable, for balance passes)
 
 int seed = 7, years = 60, tail = 15, bench = 0, traceDays = 0;
 bool knowledge = false;
@@ -19,6 +21,8 @@ for (int i = 0; i < args.Length; i++)
         case "--seed": seed = int.Parse(Next()); break;
         case "--years": years = int.Parse(Next()); break;
         case "--tail": tail = int.Parse(Next()); break;
+        case "--set": RunnerConfig.Set(Next()); break;
+        case "--pace": RunnerConfig.StopAtBronze = true; break;
         case "--bench": bench = int.Parse(Next()); break;
         case "--trace": traceDays = int.Parse(Next()); break;
         case "--knowledge": knowledge = true; break;
@@ -39,7 +43,7 @@ if (traceDays > 0) return Trace(seed, traceDays);
 if (sweep is { } range) return Sweep(range.from, range.to, years);
 if (knowledge) return Knowledge(seed, years);
 
-var world = new World(new SimConfig { Seed = seed });
+var world = new World(RunnerConfig.For(seed));
 Console.WriteLine($"Eden seed {seed}, {years} years ({world.Config.TicksPerYear} ticks/year)");
 Console.WriteLine(" year  pop  births deaths  gen  settl  trades  raids  food-stock");
 var sw = Stopwatch.StartNew();
@@ -59,16 +63,23 @@ return 0;
 
 static int Sweep(int from, int to, int years)
 {
-    Console.WriteLine("seed  final  peak  reached50  gen@50  maxGen  settl  founded  trades  raids  leaders  2settl@  trade@  raid@  outcome");
+    Console.WriteLine("seed  final  peak  reached50  gen@50  maxGen  settl  founded  trades  raids  leaders  2settl@  trade@  raid@  writing@  bronze@  known  outcome");
     var results = new string[to - from + 1];
     Parallel.For(from, to + 1, s =>
     {
-        var w = new World(new SimConfig { Seed = s });
+        var w = new World(RunnerConfig.For(s));
         int peak = 0, reachedYear = -1, genAt50 = -1, extinctYear = -1, twoAt = -1, tradeAt = -1, raidAt = -1;
+        // Knowledge pace (K1): first year anyone knew writing / bronze casting.
+        int writingAt = -1, bronzeAt = -1;
+        w.Graph.TryIndex("writing", out int writingIdx);
+        w.Graph.TryIndex("bronze-casting", out int bronzeIdx);
         for (int y = 1; y <= years; y++)
         {
             for (int t = 0; t < w.Config.TicksPerYear; t++) w.Step();
             peak = Math.Max(peak, w.Population);
+            if (writingAt < 0 && w.Graph.EverKnown(writingIdx)) writingAt = y;
+            if (bronzeAt < 0 && w.Graph.EverKnown(bronzeIdx)) bronzeAt = y;
+            if (RunnerConfig.StopAtBronze && bronzeAt > 0) break;
             if (twoAt < 0 && w.SettlementCount >= 2) twoAt = y;
             if (tradeAt < 0 && w.TotalTrades > 0) tradeAt = y;
             if (raidAt < 0 && w.TotalRaids > 0) raidAt = y;
@@ -78,7 +89,8 @@ static int Sweep(int from, int to, int years)
         string outcome = extinctYear > 0 ? $"died out in year {extinctYear}" : reachedYear > 0 ? "grew" : "alive, under 50";
         results[s - from] = $"{s,4}  {w.Population,5}  {peak,4}  {(reachedYear > 0 ? "year " + reachedYear : "-"),9}  {(genAt50 >= 0 ? genAt50.ToString() : "-"),6}  {w.MaxLineage,6}"
             + $"  {w.SettlementCount,5}  {w.TotalSettlementsFounded,7}  {w.TotalTrades,6}  {w.TotalRaids,5}  {w.LeadersChosen,7}"
-            + $"  {Yr(twoAt),7}  {Yr(tradeAt),6}  {Yr(raidAt),5}  {outcome}";
+            + $"  {Yr(twoAt),7}  {Yr(tradeAt),6}  {Yr(raidAt),5}  {Yr(writingAt),8}  {Yr(bronzeAt),7}  {w.Graph.KnownAnywhereCount(),5}  {outcome}";
+        Console.Error.WriteLine(results[s - from]); // progress for long sweeps; stdout keeps the ordered table
     });
     foreach (var line in results) Console.WriteLine(line);
     return 0;
@@ -130,7 +142,7 @@ static int Trace(int seed, int days)
 // Per decade: population, concepts known anywhere (living knower or written record), records, and what changed.
 static int Knowledge(int seed, int years)
 {
-    var w = new World(new SimConfig { Seed = seed });
+    var w = new World(RunnerConfig.For(seed));
     var g = w.Graph;
     Console.WriteLine($"Eden seed {seed}, {years} years, {g.Count} concepts; first NPCs know {string.Join(", ", ConceptGraph.StarterSet)}");
     Console.WriteLine(" year  pop  known  records  gained / lost this decade");
@@ -178,4 +190,34 @@ static int Knowledge(int seed, int years)
     if (frontier.Count > 0 && w.Population > 0) Console.WriteLine($"\nnot known (best weakest prerequisite): {string.Join(", ", frontier)}");
     Console.WriteLine($"\nstate hash {w.StateHash():X16}");
     return 0;
+}
+
+/// <summary>K1: SimConfig overrides from <c>--set Name=value</c> (applied through the config's JSON form), and sweep options.</summary>
+static class RunnerConfig
+{
+    private static readonly List<(string name, string value)> Overrides = new();
+
+    public static bool StopAtBronze;
+
+    public static void Set(string pair)
+    {
+        int eq = pair.IndexOf('=');
+        if (eq <= 0) throw new ArgumentException($"--set needs Name=value, got {pair}");
+        Overrides.Add((pair[..eq], pair[(eq + 1)..]));
+    }
+
+    public static SimConfig For(int seed)
+    {
+        var cfg = new SimConfig { Seed = seed };
+        if (Overrides.Count == 0) return cfg;
+        var node = System.Text.Json.JsonSerializer.SerializeToNode(cfg)!.AsObject();
+        foreach (var (name, value) in Overrides)
+        {
+            if (!node.ContainsKey(name)) throw new ArgumentException($"SimConfig has no {name}");
+            node[name] = bool.TryParse(value, out bool b)
+                ? System.Text.Json.Nodes.JsonValue.Create(b)
+                : System.Text.Json.Nodes.JsonValue.Create(double.Parse(value, System.Globalization.CultureInfo.InvariantCulture));
+        }
+        return System.Text.Json.JsonSerializer.Deserialize<SimConfig>(node)!;
+    }
 }

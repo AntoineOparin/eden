@@ -211,3 +211,59 @@ with `UseBrain = false`. The main-scene test sets `UseBrain = false`.
 real calls from tests (AGENTS.md: no API calls from tests).
 **Evidence.** Headless boot prints `Eden mind: provider none`.
 **Revisit when.** Never for tests. A deployed URL changes only `BrainDefaults`.
+
+## 2026-11-06 — K1: forgetting details the roadmap left open
+**Decision.** Forgetting follows roadmap item 1 (`ForgetRatePerYear` 0.05, `ForgetGraceYears` 2), with
+four choices the roadmap did not make. (1) "Practised" means any of: honed by a completed action
+(even at p = 1), explained in chatter or a lesson, or raised by learning, apprenticeship or reading.
+(2) The floor is the written level in the nearest record within `ForgetRecordRadius` (64 m, the
+distance inside which writers do not found a second record), and only for an NPC that can read
+(`writing` ≥ 0.3 or `pictographs` ≥ 0.6); an illiterate villager next to an archive gets no floor.
+(3) Decay is asymptotic, so a third tunable `ForgetDropBelow` (0.05) sets p to 0 below it: the concept
+is then forgotten, can be rediscovered, and if nobody else holds it a `knowledge-lost` entry is
+written. Without it a concept would linger at 0.0001 forever and block rediscovery. (4) Last-practised
+ticks are per NPC per concept index (`KnowledgeState.LastPractised`, arrays reused per slot), saved as
+a versioned tail block inside KNW2 so old saves still load (their holders start the grace at load),
+and mixed into `StateHash`.
+**Why.** (1) matches "practising, teaching and reading already raise p". (2) "nearest readable record":
+reading needs literacy everywhere else in the sim. (3) see above. (4) the brief: additive KNW2, no
+per-tick cost (the pass runs in the existing daily knowledge hook and walks one array).
+**Evidence.** `ForgettingTests` (formula, grace, practice, floor, loss, determinism, save round trip);
+`KnowledgeTests.Save_and_load_round_trip_knowledge_records_tools_and_inventions` unchanged and green.
+**Revisit when.** Settlement archives should floor everyone in the settlement, literate or not.
+
+## 2026-11-06 — K1: era targets
+**Decision.** On seeds 1..20, headless (no LLM inventions): the median seed first knows writing in
+years 150–250 and bronze casting in years 300–450; no seed knows writing before year 75 or bronze before
+year 150 (half of each band's lower bound). Copper and the early metals sit between the two. Tuning
+aims a little late (writing ≈ 200–220 headless) because Mind inventions are assumed to add about 10 %
+discovery pressure in a live game.
+**Why.** The roadmap's suggestion. Before K1 the median seed wrote in year 64 and cast bronze in year 90,
+so the whole graph was spent by year 130 and the late game had nothing left to find. Two to three
+centuries between first fire and writing gives the god something to watch and to steer.
+**Evidence.** STATUS "K1 knowledge balance" sweep tables (before/after). `PacingTests`.
+**Revisit when.** Live LLM inventions are measured (then re-run the sweep with a Mind attached), or M8
+changes population size, which moves every pace number.
+
+## 2026-11-06 — K1: pace tunables
+**Decision.** The lever is the shape of the difficulty curve, not the global rates. Discovery weight is
+now `max(0.02, 1 − difficulty)^3` (`DiscoveryDifficultyExponent` = 3, int), and the late chain steps got
+high difficulty: tally-marks 0.7, pictographs 0.94, writing 0.9 (unchanged, the authoring anchor),
+copper-smelting 0.94, metalworking 0.94, bronze-casting 0.93, iron-smelting 0.97, smithing 0.95, plus
+0.65–0.85 for the writing-era follow-ons. `DiscoveryRate` (1e-4), `ChatterRate` (0.04), `TeachRate`
+(0.25) and `ApprenticeRatePerDay` (0.04) stay as they were.
+**Why.** Population booms from ~50 to ~2,000 between years 40 and 90 (farming), so after that any
+eligible concept with linear weight ≥ 0.02 is found within a few years by somebody. Lowering
+`DiscoveryRate` or the transmission rates slows the 2-person early game just as much (and the M4 test
+"discovers something within a few years" and the M1/M3 growth tests depend on it), while barely
+delaying the late game. A cubic curve leaves easy concepts (difficulty ≤ 0.3) within a factor of 2–3
+of before and makes the hard steps 100–1000× rarer. Splitting the delay over several hard steps
+(pictographs → writing; copper → metalworking → bronze) instead of one very hard step keeps the
+seed-to-seed spread down: a single 0.95 bronze step left 3 of 12 seeds without bronze at year 500.
+Exponent 4 was tried and rejected: writing at 0.9 (fixed by the authoring rules) becomes a ~200-year
+single step and several seeds cast bronze before writing.
+**Evidence.** Sweeps (seeds 1..12, `--pace`): exponent 3 with the old difficulties gave writing ≈ 100,
+bronze ≈ 140; exponent 4 gave writing 105–332 or never, bronze 149–369; candidate A (pictographs,
+copper, metalworking 0.93, bronze 0.95) gave writing median 163, bronze median 392 with 3 seeds none by
+500. Final values: STATUS K1 table.
+**Revisit when.** Population scale changes (M8), or players report the late game as a wall.
