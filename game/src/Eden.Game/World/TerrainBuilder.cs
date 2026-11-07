@@ -13,6 +13,11 @@ namespace Eden.Game;
 /// from each building to its settlement's centre, and rebuilds only the chunks that changed. The sim's heightmap is
 /// never modified. <see cref="SampleRender"/> gives props and NPCs the ground they are drawn on.
 /// </para>
+/// <para>
+/// A2: the flattened footprint blends back into the slope over <see cref="YardBlend"/> metres; straight painted roads
+/// gave way to a planned road network (<see cref="Roads"/>, drawn as draped meshes by <see cref="RoadRenderer"/>) with a
+/// dirt underlay; <see cref="LastDirtyChunks"/> tells decor which chunks to refresh.
+/// </para>
 /// </summary>
 public partial class TerrainBuilder : Node3D
 {
@@ -56,6 +61,8 @@ public partial class TerrainBuilder : Node3D
             child.QueueFree();
         }
         _chunks.Clear();
+        _roadCache.Clear();
+        _roads = new();
         var info = snapshot.World;
         _info = info;
         _builtHeights = snapshot.Heights;
@@ -89,7 +96,12 @@ public partial class TerrainBuilder : Node3D
             _chunks[(cx, cz)] = instance;
             ChunkCount++;
         }
+        // A2: a rebuilt heightmap (terraforming) keeps its yards and roads: re-apply the last foundations.
+        if (_lastFoundations is not null) ApplyFoundationsCore(_lastFoundations, _lastBuildings, snapshot.Heights.Span);
     }
+
+    private IReadOnlyList<Foundation>? _lastFoundations;
+    private BuildingView[] _lastBuildings = [];
 
     private bool _texturesBound;
 
@@ -130,11 +142,37 @@ public partial class TerrainBuilder : Node3D
         return _render[z * _info.Width + x];
     }
 
+    /// <summary>A2: width (metres) over which the flattened footprint blends back into the natural slope.</summary>
+    [Export] public float YardBlend { get; set; } = 2.5f;
+
+    /// <summary>A2: dirt weight painted under roads (the road mesh draws on top; this softens its edges).</summary>
+    [Export] public float RoadUnderlay { get; set; } = 0.45f;
+
+    /// <summary>Roads planned by the last <see cref="ApplyFoundations"/> (A2, <see cref="RoadNetwork"/>), over the drawn ground.</summary>
+    public IReadOnlyList<Road> Roads => _roads;
+
+    /// <summary>Terrain chunks (cx, cz) whose mesh the last <see cref="ApplyFoundations"/> rebuilt; decor and props refresh only these.</summary>
+    public IReadOnlySet<(int X, int Z)> LastDirtyChunks => _lastDirty;
+
+    private List<Road> _roads = new();
+    private HashSet<(int X, int Z)> _lastDirty = new();
+    private readonly Dictionary<int, (ulong Signature, List<Road> Roads)> _roadCache = new();
+
     /// <summary>
-    /// Flattens the render heights under <paramref name="foundations"/> (footprint to the foundation top, a one-cell
-    /// apron half way), marks yards and settlement roads as dirt, and rebuilds the changed chunks. Render-side only.
+    /// Flattens the render heights under <paramref name="foundations"/> (footprint to the foundation top, blending back
+    /// to the natural ground over <see cref="YardBlend"/> metres so a terrace reads as a yard), marks yards as dirt,
+    /// plans the settlement roads over the result (<see cref="Roads"/>) with a dirt underlay, and rebuilds only the
+    /// changed chunks. Render-side only.
     /// </summary>
     public void ApplyFoundations(IReadOnlyList<Foundation> foundations, ReadOnlySpan<BuildingView> buildings, ReadOnlySpan<float> simHeights)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        _lastFoundations = foundations.ToArray();
+        _lastBuildings = buildings.ToArray();
+        try { ApplyFoundationsCore(foundations, buildings, simHeights); } finally { Dev.FrameTimeProbe.Note("terrain foundations", sw.Elapsed.TotalMilliseconds); }
+    }
+
+    private void ApplyFoundationsCore(IReadOnlyList<Foundation> foundations, ReadOnlySpan<BuildingView> buildings, ReadOnlySpan<float> simHeights)
     {
         if (_info is null || _render.Length == 0 || simHeights.Length < _render.Length) return;
         var info = _info;
@@ -142,36 +180,64 @@ public partial class TerrainBuilder : Node3D
         float cs = info.CellSize;
         var render = simHeights.ToArray();
         var dirt = new float[render.Length];
+        // Per cell: the highest footprint top covering it, and the strongest yard blend around footprints.
+        var inside = new float[render.Length];
+        var blend = new float[render.Length];
+        var blendTop = new float[render.Length];
+        Array.Fill(inside, float.MinValue);
+        float core = cs * 0.5f;
 
         foreach (var f in foundations)
         {
-            float reach = MathF.Max(f.HalfExtents.X, f.HalfExtents.Y) * 1.5f + cs * 2f;
+            bool dock = f.Top <= info.SeaLevel + 0.31f;
+            float reach = MathF.Max(f.HalfExtents.X, f.HalfExtents.Y) * 1.42f + core + YardBlend + cs;
             int x0 = Math.Max(0, (int)((f.Centre.X - reach) / cs)), x1 = Math.Min(w - 1, (int)((f.Centre.X + reach) / cs) + 1);
             int z0 = Math.Max(0, (int)((f.Centre.Z - reach) / cs)), z1 = Math.Min(h - 1, (int)((f.Centre.Z + reach) / cs) + 1);
-            bool dock = f.Top <= info.SeaLevel + 0.31f;
             for (int z = z0; z <= z1; z++)
             for (int x = x0; x <= x1; x++)
             {
                 int i = z * w + x;
-                float px = x * cs, pz = z * cs;
                 if (simHeights[i] <= info.SeaLevel) continue; // never raise the sea floor (docks)
-                if (f.Contains(px, pz, cs * 0.5f))
+                float d = f.DistanceOutside(x * cs, z * cs);
+                if (d <= core)
                 {
-                    if (!dock) render[i] = MathF.Max(render[i] == simHeights[i] ? float.MinValue : render[i], f.Top);
+                    if (!dock) inside[i] = MathF.Max(inside[i], f.Top);
                     dirt[i] = MathF.Max(dirt[i], 0.8f);
                 }
-                else if (f.Contains(px, pz, cs * 1.5f))
+                else if (d < core + YardBlend)
                 {
-                    if (!dock && render[i] == simHeights[i]) render[i] = simHeights[i] + (f.Top - simHeights[i]) * 0.5f;
-                    dirt[i] = MathF.Max(dirt[i], 0.3f);
+                    float wgt = 1f - Mathf.SmoothStep(core, core + YardBlend, d);
+                    if (!dock && wgt > blend[i]) { blend[i] = wgt; blendTop[i] = f.Top; }
+                    dirt[i] = MathF.Max(dirt[i], 0.35f * wgt);
                 }
             }
         }
-        PaintRoads(buildings, dirt, simHeights, info);
+        for (int i = 0; i < render.Length; i++)
+        {
+            if (inside[i] > float.MinValue) render[i] = inside[i];
+            else if (blend[i] > 0f) render[i] = simHeights[i] + (blendTop[i] - simHeights[i]) * blend[i];
+        }
+
+        // Roads over the drawn ground (unclamped, so water reads as water), with a dirt underlay off the bridges.
+        float Ground(float x, float z) => HeightField.Sample(render, info, x, z);
+        _roads = RoadNetwork.Plan(buildings, foundations, Ground, info.SeaLevel, _roadCache);
+        foreach (var road in _roads)
+        {
+            for (int k = 0; k < road.Points.Length; k++)
+            {
+                if (road.OnBridge(k * RoadNetwork.Step)) continue;
+                var p = road.Points[k];
+                int x = (int)MathF.Round(p.X / cs), z = (int)MathF.Round(p.Y / cs);
+                if (x < 0 || z < 0 || x >= w || z >= h) continue;
+                int i = z * w + x;
+                if (render[i] <= info.SeaLevel + 0.2f) continue;
+                dirt[i] = MathF.Max(dirt[i], RoadUnderlay);
+            }
+        }
 
         // Diff against what is drawn and rebuild only the touched chunks.
         int chunk = Math.Max(1, info.ChunkSize);
-        var dirty = new HashSet<(int, int)>();
+        var dirty = new HashSet<(int X, int Z)>();
         for (int i = 0; i < render.Length; i++)
         {
             if (render[i] == _render[i] && dirt[i] == _dirt[i]) continue;
@@ -189,46 +255,34 @@ public partial class TerrainBuilder : Node3D
         _render = render;
         _dirt = dirt;
         LastRebuiltChunks = 0;
+        _lastDirty = new HashSet<(int X, int Z)>();
         if (dirty.Count == 0) return;
         RenderVersion++;
         foreach (var key in dirty)
         {
             if (!_chunks.TryGetValue(key, out var node)) continue;
-            var mesh = BuildChunkMesh(_render, _biomes, info, key.Item1, key.Item2, _dirt);
+            var mesh = BuildChunkMesh(_render, _biomes, info, key.X, key.Z, _dirt);
             if (mesh is null) continue;
             node.Mesh = mesh;
+            _lastDirty.Add(key);
             LastRebuiltChunks++;
         }
     }
 
-    /// <summary>Dirt roads: a line of packed earth from every building to the centre of its settlement.</summary>
-    private static void PaintRoads(ReadOnlySpan<BuildingView> buildings, float[] dirt, ReadOnlySpan<float> heights, WorldInfo info)
+    /// <summary>A2: the dirt weight (yards, roads) of the cell nearest a world point; 0 before the first build.</summary>
+    public float DirtAt(float x, float z)
     {
-        if (buildings.Length == 0) return;
-        var sums = new Dictionary<int, (float X, float Z, int N)>();
-        foreach (var b in buildings)
-        {
-            if (b.SettlementId < 0) continue;
-            var s = sums.GetValueOrDefault(b.SettlementId);
-            sums[b.SettlementId] = (s.X + b.X, s.Z + b.Z, s.N + 1);
-        }
-        float cs = info.CellSize;
-        foreach (var b in buildings)
-        {
-            if (b.SettlementId < 0 || !sums.TryGetValue(b.SettlementId, out var s) || s.N < 2) continue;
-            float tx = s.X / s.N, tz = s.Z / s.N;
-            float len = MathF.Sqrt((tx - b.X) * (tx - b.X) + (tz - b.Z) * (tz - b.Z));
-            int steps = (int)(len / (cs * 0.5f));
-            for (int k = 0; k <= steps; k++)
-            {
-                float t = steps == 0 ? 0 : k / (float)steps;
-                int x = (int)MathF.Round((b.X + (tx - b.X) * t) / cs), z = (int)MathF.Round((b.Z + (tz - b.Z) * t) / cs);
-                if (x < 0 || z < 0 || x >= info.Width || z >= info.Height) continue;
-                int i = z * info.Width + x;
-                if (heights[i] <= info.SeaLevel + 0.2f) continue;
-                dirt[i] = MathF.Max(dirt[i], 0.7f);
-            }
-        }
+        if (_info is null || _dirt.Length == 0) return 0f;
+        int cx = Math.Clamp((int)MathF.Round(x / _info.CellSize), 0, _info.Width - 1);
+        int cz = Math.Clamp((int)MathF.Round(z / _info.CellSize), 0, _info.Height - 1);
+        return _dirt[cz * _info.Width + cx];
+    }
+
+    /// <summary>Render height at a world point without the sea-level clamp (bridges, piles); 0 before the first build.</summary>
+    public float SampleRenderRaw(float x, float z)
+    {
+        if (_info is null || _render.Length == 0) return 0f;
+        return HeightField.Sample(_render, _info, x, z);
     }
 
     /// <summary>

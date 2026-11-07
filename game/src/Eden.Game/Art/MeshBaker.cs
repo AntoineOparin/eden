@@ -45,6 +45,12 @@ public static class MeshBaker
         var idx = new List<int>(2048);
         foreach (var part in parts)
         {
+            if (part.Path.StartsWith(ProceduralPrefix, StringComparison.Ordinal))
+            {
+                // A2: a procedural piece (ProceduralMeshes.Named) merged like a kit piece, colours kept.
+                if (ProceduralMeshes.Named(part.Path[ProceduralPrefix.Length..]) is { } pm) AppendBaked(pm, part.Xform, verts, norms, cols, idx);
+                continue;
+            }
             var root = GltfLoader.Template(part.Path);
             if (root is null) continue;
             Append(root, part.Xform, part, verts, norms, cols, idx);
@@ -65,6 +71,32 @@ public static class MeshBaker
     }
 
     public static void ClearCache() => Cache.Clear();
+
+    /// <summary>A <see cref="Part.Path"/> starting with this names a procedural mesh (<see cref="ProceduralMeshes.Named"/>) instead of a file.</summary>
+    public const string ProceduralPrefix = "proc:";
+
+    private static void AppendBaked(ArrayMesh mesh, Transform3D xform, List<Vector3> verts, List<Vector3> norms, List<Color> cols, List<int> idx)
+    {
+        var normalBasis = xform.Basis.Inverse().Transposed();
+        bool flip = xform.Basis.Determinant() < 0;
+        for (int s = 0; s < mesh.GetSurfaceCount(); s++)
+        {
+            var arr = mesh.SurfaceGetArrays(s);
+            var v = arr[(int)Mesh.ArrayType.Vertex].AsVector3Array();
+            var n = arr[(int)Mesh.ArrayType.Normal].AsVector3Array();
+            var c = arr[(int)Mesh.ArrayType.Color].AsColorArray();
+            var ii = arr[(int)Mesh.ArrayType.Index].AsInt32Array();
+            int baseIndex = verts.Count;
+            for (int k = 0; k < v.Length; k++)
+            {
+                verts.Add(xform * v[k]);
+                norms.Add(n.Length > k ? (normalBasis * n[k]).Normalized() : Vector3.Up);
+                cols.Add(c.Length > k ? c[k] : Colors.White);
+            }
+            if (ii.Length == 0) { for (int k = 0; k + 2 < v.Length; k += 3) { idx.Add(baseIndex + k); idx.Add(baseIndex + (flip ? k + 2 : k + 1)); idx.Add(baseIndex + (flip ? k + 1 : k + 2)); } }
+            else for (int k = 0; k + 2 < ii.Length; k += 3) { idx.Add(baseIndex + ii[k]); idx.Add(baseIndex + (flip ? ii[k + 2] : ii[k + 1])); idx.Add(baseIndex + (flip ? ii[k + 1] : ii[k + 2])); }
+        }
+    }
 
     /// <summary>Axis-aligned bounds of a mesh's single surface (cheap, from the vertex array).</summary>
     public static Aabb Bounds(Mesh mesh) => mesh.GetAabb();

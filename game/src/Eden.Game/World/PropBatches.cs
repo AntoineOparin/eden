@@ -43,7 +43,21 @@ public sealed class PropBatches
     public void Begin()
     {
         foreach (var b in _batches.Values) b.Count = 0;
+        _only = null;
     }
+
+    /// <summary>
+    /// A2: starts a partial refresh. Only batches of the listed chunks are emptied; the caller re-adds just their
+    /// instances and <see cref="Commit"/> uploads only those, so one changed chunk costs one chunk's work.
+    /// </summary>
+    public void Begin(IReadOnlySet<int> chunks)
+    {
+        foreach (var (key, b) in _batches)
+            if (chunks.Contains(key.Chunk)) b.Count = 0;
+        _only = chunks;
+    }
+
+    private IReadOnlySet<int>? _only;
 
     public void Add(int chunk, Mesh mesh, in Transform3D xf, Color custom)
     {
@@ -86,8 +100,14 @@ public sealed class PropBatches
     public void Commit()
     {
         int instances = 0, active = 0;
-        foreach (var b in _batches.Values)
+        foreach (var (key, b) in _batches)
         {
+            if (_only is not null && !_only.Contains(key.Chunk))
+            {
+                instances += b.Count;
+                if (b.Count > 0) active++;
+                continue;
+            }
             if (b.Count == 0)
             {
                 b.Node.Visible = false;
@@ -108,6 +128,7 @@ public sealed class PropBatches
         }
         InstanceCount = instances;
         ActiveBatches = active;
+        _only = null;
     }
 
     public void Clear()

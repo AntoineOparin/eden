@@ -373,3 +373,88 @@ three background thinkers on (that is why thinkers are off in the check now).
 
 **Not done / notes.** The scripted check plans its own A* route over the heightmap (a player steers by eye). Buildings
 and trees do not block the body; possession needs the real sim (fake sim falls back). See backlog.
+
+## 2026-11-07 — A2 art follow-ups (branch a2-art-followups)
+
+**What.** The second art pass toward the Nova Roma look (brief `docs/specs/briefs/a2-art-followups.md`, spec 45 "As built
+(A2)", DECISIONS 2026-11-07 "A2:").
+
+- **Sky and weather.** 90 procedural cartoon cumulus (`World/CloudLayer.cs`, `shaders/clouds.gdshader`) drifting at
+  60–120 m, mostly round the shores, faded near the camera, no shadows by default (`--cloud-shadows`); rain shows every
+  cloud in slate grey, drought a few warm ones. The weather comes from the god's casts and the Chronicle
+  (`World/WeatherState.cs`) because the snapshot has no weather field; the power effects' screen tint shares its colours.
+  `SkyCycle` warms the night and dusk light set-ups in its first three frames.
+- **Animals.** Quaternius CC0 deer, pig (as a wild boar) and sheep from Poly Pizza (`game/assets/animals/`, 1.3 MB; the
+  pack's Google Drive was over quota), posed once (`Art/Skinning.cs`, `Art/AnimalLibrary.cs`) at true size (deer
+  1.2 m at the shoulder), 2–5 per herd drifting slowly inside the herd, on the ground, tilted with it, instanced
+  through `PropBatches`: 1,000 animals (200 herds) cost 0.69 ms per frame in the gdUnit measurement.
+- **Structures.** Roads planned as a spanning tree per settlement (`World/RoadNetwork.cs`) and drawn as strips draped on
+  the terrain (`World/RoadRenderer.cs`); plank bridges with piles where a road crosses water or a notch, resting on both
+  banks; one to three record stelae with a carved glyph in front of each finished archive; an altar with offerings
+  inside every shrine (a `proc:` part merged by `MeshBaker`). Foundations blend into the slope over 2.5 m (yards, not
+  steps), and a rebuilt heightmap (terraforming) keeps its yards and roads.
+- **Characters.** "Less chibi": `Art/CharacterProportions.cs` reshapes the Kenney rig once (legs × 2.3, torso × 1.8, arms
+  × 1.3 and turned down, head × 0.52): head share of the height 0.49–0.60 → 0.19–0.24 (about 1:4.2–1:5.3), adults still
+  1.75 m, same animations; mid LOD and impostors re-baked. [Close-up](art/shots/a2-characters-close.jpg),
+  [scale lineup 30 m](art/shots/scale-lineup-30m.jpg) (now with the animals, a stela and a bridge in the last row).
+- **Hitches.** Impostor atlas cached in `user://cache/impostor-atlas-<hash>.png` (loaded in `_Ready`, nothing rendered or
+  read back); decor and props refresh only the terrain chunks a new building touched, one frame after the terrain
+  (`TerrainBuilder.LastDirtyChunks`, `PropBatches.Begin(chunks)`), roads a frame after that.
+- **Power effects.** `--fx-check=DIR` (`Dev/FxCheck.cs`) plays every power at the town and saves `fx-*.jpg`; after looking
+  at them the curse smoke now rises above the roofs with a dark ring, drought dust is larger and the weather tint
+  stronger. Lightning still has no bolt (backlog).
+- **Dev.** `--log-frame-time` logs every frame over 33 ms after the 4 s warm-up with the one-off work in it
+  (`FrameTimeProbe.Note`); scripted runs (`--quit-after`, `--fx-check`) make the window no-focus and always on top and
+  turn edge-pan off, after stray keystrokes changed a "paused" screenshot and macOS froze a covered window's frames.
+
+**How verified.**
+
+- `./scripts/check.sh` green from the worktree root: contracts, 268 Eden.Sim tests (unchanged), headless boot clean, 85 Worker
+  tests. Eden.Game gdUnit4: 64 (was 53): +11 `A2ArtTests`
+  (animal sizes and clean loading; herds 2–5 per node on the ground inside the herd plus the 200-herd cost; head ratio
+  and adult height of every model; stela / altar / bridge / cloud sizes and the shrine still in its footprint; stelae on a
+  30° slope keep their footing under the ground; roads within 1–15 cm above the drawn ground, yards between slope and
+  top, stelae in front of the archive, an unchanged rebuild touches nothing; a road over a sea channel gets a bridge whose
+  deck ends rest on the banks and whose piles reach the ground, and no strip over water; the bridge finder on water,
+  notches and slopes; a new building rescans ≤ 1/6 of the decor cells (one chunk's worth instead of 64,516); clouds
+  thicken in rain and thin in drought, Chronicle wording, expiry by tick; atlas cache key).
+- The fps budget test passes with the display attached (`dotnet test … --settings` without `--headless`,
+  `ArtPassTests.Fps_budget_2000_fake_npcs`).
+- Numbers: M4 Pro, 1600×900, `--disable-vsync --log-fps --log-frame-time`, 4 s warm-up. The display now caps at
+  100–145 Hz whatever the flags, so fps reads as the cap; "possible" is 1000 / (scripts + render CPU). Load average was
+  15–28 during both sets (other agents' runs), so the two columns are close to noise.
+
+| Scenario | Budget | Before (base) | After (A2) |
+|---|---|---|---|
+| FakeSimHost 2,000 NPCs | ≥ 60 fps | 122 fps avg (capped); ~640 possible; scripts 1.25 ms; 206–470 draw calls | 120 fps avg (capped); ~605 possible; scripts 1.51 ms (1.3 steady); 214–481 draw calls |
+| FakeSimHost 5,000 NPCs | ≥ 30 fps | 139 fps avg; ~392 possible; scripts 2.31 ms; 206–454 draw calls | 120 fps avg (capped); ~348 possible; scripts 2.68 ms; 214–467 draw calls |
+| Real seed 20, year 120 (1,442 people), 140 m over the biggest town, 60 s at 1× | ≥ 60 fps | 144.5 fps avg (capped); ~617 possible; scripts 1.13 ms; 238–525 draw calls | 120 fps avg (capped); ~789 possible; scripts 1.09 ms; 250–551 draw calls |
+| Startup to first frame (fake) | < 4 s | 0.96 s | 1.00 s |
+
+  Hitches (`[hitch]` lines; "after the warm-up" is the A2 target of no frame over 33 ms):
+
+| Hitch | Before | After |
+|---|---|---|
+| Impostor atlas readback | rendered and read back every run (1.3–1.6 ms of readback at 0.27 s, a 35 ms start-up frame) | cache hit: PNG loaded in `_Ready` (< 1 ms, before the first frame); a render only on a machine's first run of a character set |
+| Decor rebuild when a building completes (real, year 120) | full 65k-cell scan 1.6–1.7 ms in the same frame as the terrain rebuild (5.4–5.6 ms) and a full prop re-batch: worst frame of the run 31.0 ms at 46.9 s | terrain 4.6–6.5 ms, then only the touched chunks' decor and props (< 1 ms) a frame later, roads a frame after: those frames no longer the worst; worst frame 23.7 ms (a full resource re-batch when many resources changed at once, 15 ms) |
+| First night / light variants | 1.1 s stalls: real run at 2.5 s (first day after a night start, in the warm-up) and the 5,000 run at 23 s (after the warm-up) | none; light set-ups compiled in the first three frames |
+| Frames over 33 ms after the warm-up: fake 2,000 / 5,000 / real year 120 | 0 / 1 (1,098 ms) / 0 (worst 31.0 ms) | 0 / 0 / 0 (worst 17.6 / 20.4 / 23.7 ms) |
+
+- Screenshots (seed 20, 10:00, `--focus=town --paused`; year 60 is 24 people now, the sim's trajectory has changed since
+  A1): year 60 [before 30 m](art/shots/a2-before-30m-y60.jpg) / [after 30 m](art/shots/a2-after-30m-y60.jpg),
+  [before 140 m](art/shots/a2-before-140m-y60.jpg) / [after 140 m](art/shots/a2-after-140m-y60.jpg); year 120
+  [before 30 m](art/shots/a2-before-30m-y120.jpg) / [after 30 m](art/shots/a2-after-30m-y120.jpg),
+  [before 140 m](art/shots/a2-before-140m-y120.jpg) / [after 140 m](art/shots/a2-after-140m-y120.jpg). Power effects
+  (`--seed=20 --year=60 --hour=10 --fx-check=…`): [spawn human](art/shots/fx-spawn-human.jpg),
+  [animals](art/shots/fx-spawn-animals.jpg), [plants](art/shots/fx-spawn-plants.jpg), [rain](art/shots/fx-rain.jpg) and
+  [its sky](art/shots/fx-rain-sky.jpg), [drought](art/shots/fx-drought.jpg) and [its sky](art/shots/fx-drought-sky.jpg),
+  [raise](art/shots/fx-raise-land.jpg), [lower](art/shots/fx-lower-land.jpg), [bless](art/shots/fx-bless.jpg),
+  [curse](art/shots/fx-curse.jpg), [drop food](art/shots/fx-drop-food.jpg), [lightning](art/shots/fx-lightning.jpg).
+
+**Numbers.** Assets added: 1.3 MB (deer 1.0 MB, mostly its 13 animations; pig 160 KB; sheep 157 KB); 21 screenshots
+(4.8 MB). New draw calls: clouds 5, animals 3 (+3 shadow), roads 1 per settlement, bridges / stelae a few batches.
+
+**Not done / notes.** The 140 m before/after pictures differ little: roads and stelae are small at that height and
+dense towns hide most road strips between houses; clouds show best from 250 m up (`fx-rain-sky.jpg`). Weather is
+inferred, not read from the snapshot; lightning has no bolt; characters are about 1:4.5, not 1:6; animals drift but do
+not walk (backlog rows). `Dev/FrameTimeProbe.cs` (unowned) gained the hitch log.

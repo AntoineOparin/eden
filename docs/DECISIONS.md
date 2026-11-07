@@ -518,3 +518,79 @@ Possession is never saved: the save writes "nobody" and a load releases.
 small additive Mind method (the Spotlight already excluded the possessed NPC, no change there).
 **Evidence.** `PossessionTests` (both projects), `PossessedDialogueTests`.
 **Revisit when.** More verbs (trade, court) or a radial menu.
+
+
+## 2026-11-07 — A2: clouds are procedural, unshaded, and read the weather from the Chronicle
+**Decision.** 90 cartoon cumulus (`World/CloudLayer.cs`): five shapes of 3–5 merged flat-shaded icospheres
+(`ProceduralMeshes.Cloud`), one MultiMesh per shape, drifting with a fixed wind at 60–120 m, half of them kept over land
+and the rest round the shores and over the sea. Unshaded `shaders/clouds.gdshader` (white-to-grey gradient baked in
+the vertex colour, blue-grey at night), alpha-faded within 30–90 m of the camera so the god view is never blocked, no
+shadows unless `--cloud-shadows`. Each cloud has a coverage threshold: clear shows 60 %, rain 100 % and slate grey,
+drought 12 % and warm. The weather comes from `WeatherState`: the god's own cast (`PowerFx.WeatherPlayed`, ending after
+`WeatherDays`) and the sim's Chronicle lines ("sent rain", "drought began", "skies cleared"); the screen tint of the
+rain / drought effect uses the same colours.
+**Why.** The brief says the weather is in the snapshot; it is not (`World.Weather` is internal and the contract has no
+field), and contracts belonged to C1 in this phase. No CC0 cloud pack matched the flat style; procedural clouds cost
+five draw calls and no light variants.
+**Evidence.** `A2ArtTests.Clouds_thicken_in_rain_and_thin_in_drought`; `docs/art/shots/fx-rain-sky.jpg`,
+`fx-drought-sky.jpg`, `a2-after-140m-y120.jpg`.
+**Revisit when.** A snapshot field carries the weather (backlog row): `WeatherState.Observe` then reads it directly.
+
+## 2026-11-07 — A2: animals are Quaternius CC0 models from Poly Pizza, posed once and instanced
+**Decision.** Deer, pig (recoloured as a wild boar) and sheep by Quaternius, downloaded from Poly Pizza
+(`game/assets/animals/SOURCE.md`, 1.3 MB), posed in their idle animation by CPU skinning (`Art/Skinning.cs`, shared with
+the character poses), baked to one vertex-coloured surface each and drawn through `PropBatches` (one batch per species,
+shadows on). Sizes: deer 1.2 m at the shoulder (1.7 m to the ears), boar 0.85 m, sheep 0.75 m. Forest herds are deer or
+boar, grassland deer or sheep, highlands sheep; 2–5 animals per herd by its amount, spread on a golden-angle spiral
+over 6 m from the node id, each drifting slowly on a loop of 1.4 m around its spot (the sim does not move herds),
+facing the way it drifts, on the drawn ground, tilted up to 15°, plus the props shader's sway for grazing heads.
+**Why.** Quaternius' "Ultimate Animated Animals" page links only a Google Drive folder, and Drive answered "Quota
+exceeded" for every file on 2026-11-07 (as for A1's characters); Poly Pizza hosts the same CC0 models one by one. Kenney
+has no 3D animal pack. Skeletal animation at 800 instances would cost far more than the 1 ms the brief allows.
+**Evidence.** `A2ArtTests.Animals_load_at_true_size_with_feet_on_the_ground`,
+`Herds_place_two_to_five_animals_on_the_ground_inside_the_herd`; STATUS A2 (animal update cost).
+**Revisit when.** Herds become agents (backlog), or animals should walk with an animation at close range.
+
+## 2026-11-07 — A2: roads are a planned network of draped strips, bridges only where the profile says so
+**Decision.** `World/RoadNetwork.cs` joins each settlement's buildings and centre with a minimum spanning tree (edge
+cost = length × (1 + 3 × wet fraction); a centre in the water roots the tree at the nearest building), each edge from
+footprint edge to footprint edge sampled every metre over the flattened render heights. A sample under sea level + 0.15 m,
+or more than 1.4 m below the highest ground within 10 m on both sides (a notch), is bridged; wet spans over 32 m drop the
+edge. `World/RoadRenderer.cs` drapes a 2.2 m strip (four vertices across, 8 cm lift in the middle, 4 cm at the edges,
+tapered ends) per settlement, and lays `ProceduralMeshes.BridgeSegment` instances (1 m of planks, stringers and rails)
+along a gentle arch whose ends sit 10 cm above each bank (planks bedded 2 cm), clear of the water by 0.6 m, with timber
+piles every 3 m down into the ground or sea floor. A faint dirt underlay is still painted under the strips. Settlements
+are rebuilt only when their roads, the ground under them or their archives change, one frame after the terrain.
+**Why.** The brief's "follow the terrain, bridges only where the terrain says so"; an MST reads as paths between houses.
+**Evidence.** `A2ArtTests.Roads_drape_on_the_terrain_and_softer_yards_blend_out`,
+`Roads_cross_water_on_bridges_that_rest_on_both_banks`, `Bridge_finder_spans_water_and_notches_only`.
+**Revisit when.** The sim gets real paths (desire lines from walking) or rivers.
+
+## 2026-11-07 — A2: character proportions by reshaping the Kenney rig, not a new pack
+**Decision.** `Art/CharacterProportions.cs` edits each Kenney Mini Character template once, before anything instances or
+bakes it: legs × 2.3 from the hip, torso × 1.8, arms × 1.3 along their axis and turned down 35°, torso narrowed to
+0.86 and legs to 0.9, head × 0.52 about the neck; bone rests, skin bind poses and bind-pose vertices change together
+(the rig has identity rest rotations and its animations only rotate bones, plus root translation). Head height over
+standing height goes from 0.49–0.60 to 0.19–0.24 (about 1:4.2–1:5.3; the brief's 1:6 is out of reach without new
+meshes because the heads are wide blocks). Adults stay 1.75 m; the A1 animation set, palette shader and LODs are
+unchanged and re-baked from the reshaped templates.
+**Why.** No CC0 human pack with normal proportions in glTF was reachable (A1's note still holds); the reshape keeps
+every animation and costs nothing at runtime.
+**Evidence.** `A2ArtTests.Characters_are_less_chibi_and_still_adult_height`; `docs/art/shots/a2-characters-close.jpg`,
+`scale-lineup-30m.jpg`.
+**Revisit when.** A CC0 rigged human pack with real proportions appears (then drop the reshape).
+
+## 2026-11-07 — A2: impostor atlas cached on disk, decor rebuilt per chunk, night pipelines warmed at boot
+**Decision.** (1) `ImpostorAtlas` saves its render as `user://cache/impostor-atlas-<hash>.png` (FNV-1a of the mid models'
+names and sizes, the proportion numbers, the atlas shader source and the layout), written on a worker thread; later runs
+load it in `_Ready` and render nothing. (2) `TerrainBuilder.ApplyFoundations` reports the chunks it rebuilt
+(`LastDirtyChunks`); `ResourceRenderer` rebuilds decor and re-places props only in those chunks, one frame after the
+terrain (`PropBatches.Begin(chunks)` empties and re-uploads just those batches), and roads follow a frame later still.
+(3) `SkyCycle` shows sun+moon, moon alone and sun alone in its first three frames so the night and dusk light set-ups
+are compiled during start-up. (4) Scripted runs (`--quit-after`, `--fx-check`) set the window no-focus and always on top
+and turn edge-pan off: stray keystrokes had switched panels in a "paused" screenshot run, and macOS stops drawing a
+covered window, which froze screenshots.
+**Why.** The three backlog hitches; the brief's "cache to user://cache/ with a hash of the character set".
+**Evidence.** STATUS A2 hitch table; `A2ArtTests.A_new_building_rebuilds_only_the_decor_chunks_it_touches`,
+`Impostor_atlas_cache_key_tracks_its_inputs`.
+**Revisit when.** The atlas changes per settlement (then bake it on the GPU asynchronously instead).

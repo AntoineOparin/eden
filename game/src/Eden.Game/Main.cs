@@ -128,6 +128,7 @@ public partial class Main : Node
         }
 
         SetupM7(s); // M7 UI pass: remaining god powers, overlay, settlement panel, Chronicle (Main.M7.cs)
+        SetupA2(s); // A2 art pass: clouds and weather, roads, bridges, stelae, herds wiring, --fx-check (Main.A2.cs)
 
         // M6 possession: rig, controller, terrain collision and possession HUD live under this node (Possession/).
         AddChild(new PossessionDirector { Name = "Possession" });

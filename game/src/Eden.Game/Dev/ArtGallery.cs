@@ -50,6 +50,12 @@ public partial class ArtGallery : Node3D
         x += 5;
         Place(NatureFactory.Stump(), new Vector3(x, 0, 14), material, Colors.White);
         x += 7;
+        // A2: herd animals, a record stela and the altar on its own.
+        foreach (var species in AnimalLibrary.All) { Place(AnimalLibrary.Mesh(species), new Vector3(x, 0, 14), material, Colors.White); x += 3; }
+        Place(ProceduralMeshes.Stela(), new Vector3(x, 0, 14), material, Colors.White);
+        x += 3;
+        Place(ProceduralMeshes.Altar(), new Vector3(x, 0, 14), material, Colors.White);
+        x += 4;
         for (int stage = 0; stage < 3; stage++, x += 6) Place(NatureFactory.Crop(stage), new Vector3(x, 0, 14), material, Colors.White);
         foreach (byte biome in NatureFactory.TreeBiomes)
             foreach (var d in NatureFactory.Decor(biome))
