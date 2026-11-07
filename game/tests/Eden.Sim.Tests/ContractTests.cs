@@ -15,7 +15,8 @@ public class ContractTests
     private static EvaluationOptions BuildOptions()
     {
         foreach (var file in Directory.GetFiles(Contracts.Dir, "*.schema.json"))
-            SchemaRegistry.Global.Register(JsonSchema.FromFile(file));
+            try { SchemaRegistry.Global.Register(JsonSchema.FromFile(file)); }
+            catch (JsonSchemaException) { } // Mind/PromptContextTests may have registered them first
         return new EvaluationOptions { OutputFormat = OutputFormat.List };
     }
 

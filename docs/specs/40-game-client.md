@@ -54,6 +54,16 @@ importance, current goal/thought), settlement panel, Chronicle timeline (drains 
 brain settings (provider, base URL, model, key; key encrypted with `Crypto`/`AesContext` and a
 machine-local key file in `user://`), budget meter.
 
+**M5 as built.** `Main` builds the `MindPool` next to the host (provider "none" with the fake sim,
+headless, or `--no-brain`; `--brain` enables it headless). HUD rows: top bar (time, status), powers
+bar (`GodPowers`: Select / Lightning / Whisper; with Lightning a left click ray-marches the heightmap
+and sends `LightningCommand`), mind bar (`BudgetMeter`, "Brain" button). `scenes/ui/dialogue.tscn`
+(`DialoguePanel`) follows the selection; `scenes/ui/brain_settings.tscn` (`BrainSettingsPanel`);
+`BrainSettingsStore` keeps `user://brain_settings.json` (key = base64(iv + AES-256-CBC), PKCS#7),
+`user://brain.key` (32 random bytes) and `user://brain_budget.json`. The inspector's Thought line
+falls back to `MindPool.CurrentThought`. `--m5-check` (`Dev/M5Check.cs`) scripts the M5 manual
+check through the same UI paths (`--m5-year`, `--m5-message`, `--m5-shot`, `--m5-timeout`).
+
 **Threading.** `Main._Process`: read `host.Latest` once, pass the same snapshot to every
 renderer and UI panel; never hold a snapshot across frames except for diffing.
 

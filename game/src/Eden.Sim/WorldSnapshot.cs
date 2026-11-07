@@ -15,8 +15,11 @@ public sealed class WorldSnapshot(
     IReadOnlyList<ChronicleEntry> newChronicle,
     IReadOnlyDictionary<int, NpcDetail>? details = null,
     int[]? slotVersions = null,
-    ConcurrentQueue<int>? detailRequests = null) : IWorldSnapshot
+    ConcurrentQueue<int>? detailRequests = null,
+    MindExtras? mind = null) : IWorldSnapshot, IMindSnapshot
 {
+    private readonly MindExtras _mind = mind ?? MindExtras.Empty;
+
     private readonly IReadOnlyDictionary<int, NpcDetail> _details = details ?? new Dictionary<int, NpcDetail>();
 
     // Per slot: +version if alive, -version if the slot's last occupant died, 0 never used.
@@ -39,6 +42,21 @@ public sealed class WorldSnapshot(
         if (_details.TryGetValue(npcId, out detail!)) return true;
         if (IsAlive(npcId)) detailRequests?.Enqueue(npcId);
         return false;
+    }
+
+    public int TicksPerHour => _mind.TicksPerHour;
+    public int HoursPerDay => _mind.HoursPerDay;
+    public IReadOnlyList<int> LeaderIds => _mind.Leaders;
+    public IReadOnlyList<ChronicleEntry> RecentChronicle => _mind.RecentChronicle;
+
+    public string? SettlementName(int settlementId)
+        => settlementId >= 0 && settlementId < _mind.SettlementNames.Length ? _mind.SettlementNames[settlementId] : null;
+
+    public long LastDramaTick(int npcId)
+    {
+        if (!IsAlive(npcId)) return -1;
+        int slot = npcId & Eden.Sim.Npcs.SlotMask;
+        return slot < _mind.DramaTicks.Length ? _mind.DramaTicks[slot] : -1;
     }
 
     public bool IsAlive(int npcId)

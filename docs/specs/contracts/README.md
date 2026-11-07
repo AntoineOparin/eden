@@ -19,6 +19,12 @@ Written first, shared by every module. Change them only with a note in the PR, a
 The `.cs` files are linked as compile items into `game/src/Eden.Sim/Eden.Sim.csproj` and
 `game/src/Eden.Mind/Eden.Mind.csproj`; there is no copy in the game tree.
 
+Changes:
+
+- 2026-11-06 (M5): `SetThinkingCommand(IReadOnlyList<int> NpcIds)` added to `ISimHost.cs`. Sent by
+  Eden.Mind each in-game hour to replace the spotlight set behind `NpcView.IsThinking`. Display only:
+  not part of the state hash or the save file.
+
 Invariants enforced by tests:
 
 - `BiomeId` (C#) is the meaning of every byte in `IWorldSnapshot.Biomes`; the grid layout

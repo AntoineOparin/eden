@@ -54,6 +54,11 @@ public sealed class MemoryStore
 
     private List<Memory>?[] _streams = new List<Memory>?[64];
     private int[] _evicted = new int[64 * KindCount];
+
+    /// <summary>Per slot: 1 + tick of the newest memory with importance ≥ <see cref="DramaImportance"/>, 0 = none.
+    /// Derived from the streams (rebuilt on load), so neither hashed nor saved. Read by Eden.Mind's spotlight.</summary>
+    private long[] _drama = new long[64];
+    public const int DramaImportance = 7;
     private readonly int _cap;
     private readonly int _ticksPerDay;
 
@@ -70,6 +75,7 @@ public sealed class MemoryStore
         Ensure(slot);
         _streams[slot]?.Clear();
         Array.Clear(_evicted, slot * KindCount, KindCount);
+        _drama[slot] = 0;
     }
 
     public void Add(int slot, Memory m, long now)
@@ -77,8 +83,12 @@ public sealed class MemoryStore
         Ensure(slot);
         var list = _streams[slot] ??= new List<Memory>(16);
         list.Add(m);
+        if (m.Importance >= DramaImportance && m.Tick + 1 > _drama[slot]) _drama[slot] = m.Tick + 1;
         if (list.Count > _cap) Evict(slot, list, now);
     }
+
+    /// <summary>Tick of the newest memory with importance ≥ 7 for this slot, or -1.</summary>
+    public long LastDramaTick(int slot) => slot < _drama.Length ? _drama[slot] - 1 : -1;
 
     public bool Contains(int slot, Memory m)
     {
@@ -122,6 +132,7 @@ public sealed class MemoryStore
         while (n <= slot) n *= 2;
         Array.Resize(ref _streams, n);
         Array.Resize(ref _evicted, n * KindCount);
+        Array.Resize(ref _drama, n);
     }
 
     public ulong Hash(ulong h, Npcs npcs)
@@ -171,6 +182,7 @@ public sealed class MemoryStore
     {
         _streams = new List<Memory>?[Math.Max(64, npcs.Capacity)];
         _evicted = new int[_streams.Length * KindCount];
+        _drama = new long[_streams.Length];
         for (int s = 0; s < npcs.HighWater; s++)
         {
             if (!npcs.Alive[s]) continue;
@@ -193,6 +205,7 @@ public sealed class MemoryStore
                     m.Embedding = e;
                 }
                 list.Add(m);
+                if (m.Importance >= DramaImportance && m.Tick + 1 > _drama[s]) _drama[s] = m.Tick + 1;
             }
             for (int k = 0; k < KindCount; k++) _evicted[s * KindCount + k] = r.ReadInt32();
         }

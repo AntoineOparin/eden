@@ -25,6 +25,12 @@ public partial class NpcInspector : PanelContainer
     public int NpcId { get; private set; } = -1;
     public NpcDetail? Detail { get; private set; }
 
+    /// <summary>The Mind's latest thought for an NPC (M5); used when the sim has none.</summary>
+    public Func<int, string?>? ThoughtSource { get; set; }
+
+    /// <summary>The body text as last rendered (tests).</summary>
+    public string BodyText => _body?.Text ?? "";
+
     public override void _Ready()
     {
         CustomMinimumSize = new Vector2(320, 0);
@@ -125,7 +131,7 @@ public partial class NpcInspector : PanelContainer
 
         _sb.Clear();
         _sb.Append("[b]Goal[/b]  ").Append(Escape(d.CurrentGoal ?? "none")).Append('\n');
-        if (d.CurrentThought is { } thought) _sb.Append("[b]Thought[/b]  [i]").Append(Escape(thought)).Append("[/i]\n");
+        if ((d.CurrentThought ?? ThoughtSource?.Invoke(d.Id)) is { } thought) _sb.Append("[b]Thought[/b]  [i]").Append(Escape(thought)).Append("[/i]\n");
         AppendPairs("Traits", d.Traits);
         AppendPairs("Knowledge", d.Knowledge);
         _sb.Append("\n[b]Relationships[/b]\n");

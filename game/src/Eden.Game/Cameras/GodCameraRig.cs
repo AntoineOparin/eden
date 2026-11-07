@@ -81,10 +81,14 @@ public partial class GodCameraRig : Node3D
     public override void _Process(double delta)
     {
         var dir = Vector2.Zero;
-        if (Input.IsPhysicalKeyPressed(Key.W) || Input.IsPhysicalKeyPressed(Key.Up)) dir.Y -= 1;
-        if (Input.IsPhysicalKeyPressed(Key.S) || Input.IsPhysicalKeyPressed(Key.Down)) dir.Y += 1;
-        if (Input.IsPhysicalKeyPressed(Key.A) || Input.IsPhysicalKeyPressed(Key.Left)) dir.X -= 1;
-        if (Input.IsPhysicalKeyPressed(Key.D) || Input.IsPhysicalKeyPressed(Key.Right)) dir.X += 1;
+        bool typing = GetViewport()?.GuiGetFocusOwner() is LineEdit or TextEdit; // WASD in the dialogue box must not pan
+        if (!typing)
+        {
+            if (Input.IsPhysicalKeyPressed(Key.W) || Input.IsPhysicalKeyPressed(Key.Up)) dir.Y -= 1;
+            if (Input.IsPhysicalKeyPressed(Key.S) || Input.IsPhysicalKeyPressed(Key.Down)) dir.Y += 1;
+            if (Input.IsPhysicalKeyPressed(Key.A) || Input.IsPhysicalKeyPressed(Key.Left)) dir.X -= 1;
+            if (Input.IsPhysicalKeyPressed(Key.D) || Input.IsPhysicalKeyPressed(Key.Right)) dir.X += 1;
+        }
         if (EdgePan && DisplayServer.GetName() != "headless" && GetWindow() is { } window && window.HasFocus())
         {
             var vp = GetViewport();

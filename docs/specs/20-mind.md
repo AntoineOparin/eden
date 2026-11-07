@@ -26,7 +26,7 @@ Decide *which* NPCs get an LLM, *what* they are asked, and turn the answer into 
 **Spotlight.** Every in-game hour: score every living NPC =
 `2·proximityToCamera + 3·isLeader + 2·recentDrama(24h) + 4·playerInteraction(1 day decay) + 1·isPossessedNeighbour`.
 Top `MaxThinkingNpcs` (default 15) are thinking; the sim flag `NpcView.IsThinking` is set
-through a `SetThinkingCommand` (add to `ISimHost.cs` with a PR note). Promotion is free because
+through `SetThinkingCommand(ids)` (in `ISimHost.cs` since M5; display only, not hashed or saved). Promotion is free because
 memories were always being recorded; on promotion, missing embeddings are requested via
 `/embed` in batches of ≤ 64.
 
@@ -71,6 +71,57 @@ unknown fields rejected for responses, nulls allowed. Already present in `BrainJ
 Manual (M5): strike a village, talk to its leader, they reference the lightning unprompted;
 switch to a pasted Anthropic key and the same conversation works; budget meter halts
 background thoughts at the cap.
+
+Also covered: `PromptContextTests` (built requests validate against the schemas, time-tagged
+memory lines, "still shaken" persona) and `DirectProviderTests` (Anthropic / OpenAI-compatible
+request shapes, repair retry, error mapping, USD pricing) against stub handlers. The Sim-side
+`DialogueMemoryTests` shows the god's words spreading by the existing gossip.
+
+## As built (M5, 2026-11-06): where reality differs from the design above
+
+- **Files.** `MindPool.cs` (scheduler + dialogue), `Spotlight.cs`, `Retrieval.cs` (+ `EmbeddingCache`),
+  `IntentionMapper.cs`, `PromptContext.cs` (NpcContext / situation / memory lines), `BudgetLedger.cs`,
+  `MindStatus.cs` (+ `BrainDefaults`), `ProviderFactory.cs`, `WorkerProxyProvider.cs`,
+  `Providers/` (`DirectProvider` base, `AnthropicProvider`, `OpenAiCompatibleProvider`,
+  `PromptBuilder` = C# port of `brain/src/prompts.ts` + `json-repair.ts`, `UsdPricing`).
+- **What the Mind reads.** Only `ISimHost.Latest`. Facts the spotlight needs that the contract
+  lacks (leaders, settlement names, newest importance ≥ 7 memory tick, last 32 Chronicle entries,
+  ticks per hour) come from `Eden.Sim.IMindSnapshot`, implemented by `WorldSnapshot` (not a
+  contract; a `FakeSimHost` snapshot simply lacks it and those terms score 0). NPC details come from
+  `TryGetNpcDetail`; the Mind requests details only for spotlight NPCs (≤ `MaxThinkingNpcs`), which
+  fits the sim's 32-entry watch list next to the inspector.
+- **Spotlight terms.** proximity = `1 − dist/200 m` to the camera focus (0 beyond); recentDrama =
+  linear decay over one in-game day since the newest importance ≥ 7 memory; playerInteraction =
+  linear decay over one day since the god talked to, whispered to or selected the NPC;
+  possessed neighbour = within 24 m (perception radius). Infants and the possessed NPC never think.
+- **Embeddings live in the Mind**, cached per memory text (`EmbeddingCache`), never in sim state
+  (`Memory.Embedding` stays unused, so embeddings cannot affect determinism or saves). A thought sends
+  one `/embed` with the query plus up to 63 uncached memories; promotion embeds the rest in batches of
+  ≤ 64. Without embeddings (Anthropic, failures) relevance falls back to word overlap (Jaccard).
+- **Thought pacing.** Every 4 in-game hours staggered by `(hour + id) % 4`, plus a real-time floor of
+  60 s between two thoughts (and two reflections) of one NPC: at 1× an in-game hour is 0.5 s, so
+  without it 15 NPCs would spend the free tier in under half an hour. Pending work is de-duplicated
+  per (kind, NPC).
+- **Reflection** returns one belief (the think schema has a single `belief`), raised to importance
+  ≥ 7; beliefs mentioning the god/voice/sky are kept in `MindPool.GodBeliefs` for M7.
+- **Prompt context.** Memory lines carry a "when" prefix ("Just now:", "3 days ago:"); the persona
+  ends with "Still shaken by what happened (just now): …" for the newest importance ≥ 8 memory of the
+  last 6 in-game hours. Without that, `/chat` (which has no situation field) answered past a fresh
+  lightning strike in 2 of 3 manual runs; with it 2 of 2 referenced it.
+- **Dialogue path.** `AskAsync(npcId, message)` (the `AskAsync(ChatRequest)` overload is the raw
+  bypass). After the reply: the god's line is sent as a `WhisperCommand` (importance-9 memory, also
+  on failure: the NPC heard it), the reply as a `SayIntention` (clipped to 280 chars), the `memory`
+  field as a `BeliefIntention` raised to importance ≥ 6 so the existing gossip spreads it. History
+  (≤ 40 turns, last 20 sent) is kept per NPC in the Mind.
+- **Budget.** Background work stops at 90 %; dialogue continues until 100 % of `DailyNeuronBudget`
+  (default 9000 of the free 10,000). Successful calls are booked from `usage.neurons`; the Worker
+  provider also books the Neurons of 422 answers and the `X-Eden-Usd-Cost` header. USD is shown,
+  not capped (`BrainSettings` has no USD budget).
+- **Failures.** Network / Auth / Budget failures and timeouts back off 5 s → 10 s → … → 5 min (reset on
+  the next success); invalid output is logged and dropped without backoff; `Unsupported` on `/embed`
+  turns embeddings off for that provider.
+- **Status** is `MindStatus` (provider, model, state Off/Ok/Backoff/DialogueOnly/Exhausted, Neurons and
+  USD today, thinking, queued, in flight, completed, failures, last error).
 
 ## Carried-over items
 
