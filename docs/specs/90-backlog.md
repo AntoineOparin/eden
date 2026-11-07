@@ -12,7 +12,6 @@ merges (phase 5).
 | Animals are resource herds (`ResourceNodes` kind `game`), not agents | M3 or M8 | Plan wanted animals as simple agents; herds were enough for M1 food. Revisit when predators or herding matter. |
 | yieldMod on derived goods other than grain (fish, clay, hide, cloth, metals) has no producer yet | next Sim pass | Farming already multiplies grain by `World.YieldFactor`. Crafting a tool uses one unit of its first material node only. |
 | Memory text is built eagerly (`$"{teller} told me: ..."`), so gossip and first lessons allocate on the tick | later perf pass | M8 removed every other tick allocation (STATUS M8); what is left is the `Memory`, its text and its subjects, which are saved state. A template id + arguments rendered on demand would remove most of it, but `Contains`, `ContainsStory`, the hash and the save read the text. |
-| C1's `CHRN` chronicle section must use format-2 framing | merge of C1 + M8 | M8 changed section headers (flags byte, Brotli). `World.Section(w, tag, body)` keeps the old 3-argument call; a reader should find its section with `World.SectionsOf(body, formatVersion)` rather than parse the framing, and should run inside `SaveReader.LoadScratch` as well so a damaged section fails before the live world is touched. |
 
 ## Knowledge (from the M3/M4 merge review, `51-knowledge-roadmap.md`)
 
