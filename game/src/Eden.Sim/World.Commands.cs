@@ -8,6 +8,9 @@ public sealed partial class World
     public long WeatherUntil { get; private set; }
 
     private int _possessed = Npcs.None;
+
+    /// <summary>Ids in the Mind's spotlight (SetThinkingCommand). Display only: not hashed, not saved.</summary>
+    private readonly HashSet<int> _thinking = new();
     private float _possDirX, _possDirZ;
     private bool _possSprint;
 
@@ -62,6 +65,11 @@ public sealed partial class World
                 break;
             case PossessedInteractCommand c:
                 PossessedInteract(c.TargetId, c.Verb);
+                break;
+            case SetThinkingCommand c:
+                _thinking.Clear();
+                if (c.NpcIds is { } ids)
+                    foreach (int id in ids) if (Npcs.IsAlive(id)) _thinking.Add(id);
                 break;
             case SaveCommand c:
                 Save(c.Path);

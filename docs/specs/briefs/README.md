@@ -13,7 +13,7 @@ commit on a named branch, never merge or push; the coordinator merges after
 | `worker-m5-ready.md` | Worker | 9ab043a | worker-m5-ready | merged 72ad510 |
 | `m3-society.md` | M3 | 50f9c5a | m3-society | merged 0f615ba |
 | `m4-knowledge.md` | M4 | 50f9c5a | m4-knowledge | merged e43104f |
-| `m5-minds.md` | M5 | 9cb0216 | m5-minds | in flight |
+| `m5-minds.md` | M5 | 9cb0216 | m5-minds | merged (see git log) |
 
 ## Template
 

@@ -39,6 +39,12 @@ public sealed record PossessedMoveCommand(float DirX, float DirZ, bool Sprint) :
 /// <summary>Possessed-NPC interaction with another entity: talk|give:<itemId>|work.</summary>
 public sealed record PossessedInteractCommand(int TargetId, string Verb) : WorldCommand;
 
+/// <summary>
+/// Sent by Eden.Mind (M5): replaces the set of NPCs flagged <see cref="NpcView.IsThinking"/> (the spotlight).
+/// Display only: it never changes behaviour, the state hash or the save file. Unknown or dead ids are ignored.
+/// </summary>
+public sealed record SetThinkingCommand(System.Collections.Generic.IReadOnlyList<int> NpcIds) : WorldCommand;
+
 public sealed record SaveCommand(string Path) : WorldCommand;
 
 public sealed record LoadCommand(string Path) : WorldCommand;

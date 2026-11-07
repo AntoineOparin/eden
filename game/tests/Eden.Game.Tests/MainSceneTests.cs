@@ -25,9 +25,12 @@ public class MainSceneTests
         var main = scene.Instantiate<Main>();
         AssertThat(main).IsNotNull();
         AssertThat(main.UseFakeSim).IsFalse(); // the real SimHost stays the default
+        main.UseBrain = false; // tests never reach a real Worker
         main._Ready();
         AssertThat(main.Host).IsNotNull();
         AssertThat(main.Host is Eden.Sim.SimHost).IsTrue();
+        AssertThat(main.Mind).IsNotNull();
+        AssertThat(main.Mind!.Provider.Id).IsEqual("none");
         AssertThat(main.Host!.Latest.World.Width).IsEqual(256);
         main._ExitTree();
         main.Free();
@@ -64,7 +67,17 @@ public class MainSceneTests
         AssertThat(main.Hud.Inspector.Detail).IsNotNull();
         AssertThat(main.Hud.Inspector.Detail!.Id).IsEqual(7);
         AssertThat(main.Npcs.SelectedId).IsEqual(7);
+        AssertThat(main.Hud.Dialogue!.Visible).IsTrue(); // the dialogue panel follows the selection
+        AssertThat(main.Hud.Dialogue.NpcId).IsEqual(7);
         main.Select(-1);
         AssertThat(main.Hud.Inspector.Visible).IsFalse();
+        AssertThat(main.Hud.Dialogue.Visible).IsFalse();
+
+        // M5 HUD pieces exist; the fake sim always runs the rules-only Mind.
+        AssertThat(main.Mind!.Provider.Id).IsEqual("none");
+        AssertThat(main.Hud.Powers).IsNotNull();
+        AssertThat(main.Hud.BrainSettings).IsNotNull();
+        await runner.SimulateFrames(20);
+        AssertThat(main.Hud.BudgetMeter!.Text.Contains("none: off")).IsTrue();
     }
 }

@@ -161,7 +161,7 @@ public sealed partial class World
             int id = Npcs.IdOf(s);
             views[k++] = new NpcView(id, x, MathF.Max(Terrain.HeightAt(x, z), Config.SeaLevel - 0.8f), z,
                 Npcs.Heading[s], Npcs.Sex[s], StageOf(s), PoseOf(s),
-                (byte)Math.Clamp((int)(Npcs.Health[s] * 255f), 0, 255), SettlementOfSlot(s), false, id == _possessed);
+                (byte)Math.Clamp((int)(Npcs.Health[s] * 255f), 0, 255), SettlementOfSlot(s), _thinking.Contains(id), id == _possessed);
         }
 
         while (_detailRequests.TryDequeue(out int req))
@@ -181,7 +181,24 @@ public sealed partial class World
             Tick, clock.Year, clock.DayOfYear, clock.HourOfDay,
             new WorldInfo(Config.Seed, Config.WorldWidth, Config.WorldHeight, Config.CellSize, Config.SeaLevel, Config.ChunkSize),
             _publishedHeights ??= (float[])Terrain.Heights.Clone(), _publishedBiomes ??= (byte[])Terrain.Biomes.Clone(),
-            views, BuildingViews(), chronicle, details, versions, _detailRequests);
+            views, BuildingViews(), chronicle, details, versions, _detailRequests, MindExtras());
+    }
+
+    /// <summary>Read-only extras for Eden.Mind (spotlight, prompts); see <see cref="IMindSnapshot"/>.</summary>
+    private MindExtras MindExtras()
+    {
+        var st = Settlements;
+        var names = new string?[st.Count];
+        var leaders = new List<int>();
+        for (int k = 0; k < st.Count; k++)
+        {
+            if (!st.Alive[k]) continue;
+            names[k] = st.Name[k];
+            if (Npcs.IsAlive(st.Leader[k])) leaders.Add(st.Leader[k]);
+        }
+        var drama = new long[Npcs.HighWater];
+        for (int s = 0; s < drama.Length; s++) drama[s] = Npcs.Alive[s] ? Memories.LastDramaTick(s) : -1;
+        return new MindExtras(Config.TicksPerHour, Config.HoursPerDay, leaders.ToArray(), names, drama, ChronicleTail(32));
     }
 
     private NpcPose PoseOf(int s) => Npcs.Phase[s] switch
