@@ -108,6 +108,17 @@ controls (Kenney UI / game-icons CC0), a time display with a day-night glyph, to
 the power's effect. No layout reflow of the M5 panels beyond applying the theme and spacing.
 Light and dark both legible over bright terrain. Screenshot the HUD before/after too.
 
+**Scale (user feedback: NPCs look too big for the buildings).** One unit is one metre
+everywhere. Adult NPC height 1.75 m at hi-LOD (children 1.0–1.4 m by stage, elders 1.65 m),
+never scaled up for readability at close range. The sim's `BuildingKind.Footprint` is the
+half-extent in metres (hut 3 → 6 m across, storehouse/farm/archive/dock 4 → 8 m, well 2 → 4 m);
+size the meshes to that, with eaves at 2.6–3.5 m for huts and up to 6 m for the archive and
+shrine, doors 2 m tall. Readability from the god camera comes from a gentle far-zoom scale on
+the mid and far NPC LODs only: 1.0× below 60 m camera height rising smoothly to at most 1.6× at
+400 m, buildings never scaled. Add a "scale lineup" dev scene (one NPC next to each building
+kind and a tree of each biome) and a screenshot of it at 30 m under `docs/art/shots/`; a gdUnit
+test asserts the NPC mesh AABB height is 1.7–1.8 m and each building mesh fits its footprint.
+
 ## Not in this pass
 
 Possession camera and character controller (M6), religion/overlay visuals (M7), navigation
