@@ -231,8 +231,8 @@ public partial class GodUi : Control
             case OverlayMode.Knowledge:
                 AddKey(OverlayColors.KnowsAll, "most know");
                 AddKey(OverlayColors.Knowledge(0.5f), "some");
-                AddKey(OverlayColors.KnowsNone, "none of those asked");
-                AddKey(OverlayColors.KnowledgeUnknown, "not asked yet");
+                AddKey(OverlayColors.KnowsNone, "nobody");
+                AddKey(OverlayColors.KnowledgeUnknown, "not loaded yet");
                 break;
         }
 

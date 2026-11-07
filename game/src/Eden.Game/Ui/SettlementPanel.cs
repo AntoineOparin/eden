@@ -8,9 +8,11 @@ namespace Eden.Game;
 /// Settlement panel (M7 UI, scenes/ui/settlement.tscn). Opened by clicking a building or a settlement's land with
 /// Select, from the inspector's settlement link, or from the picker at the top. Shows name, faction (the settlements
 /// that share it), leader, members, the god's standing (favour and awe bars, stance, the neighbour envied or feared),
-/// the faith, finished shrines, what the settlement knows (sampled through <see cref="SettlementKnowledge"/>) and its
-/// recent Chronicle entries (entries that name it). Food stock is not in the contract, so it is not shown.
-/// Refreshes every <see cref="RefreshSeconds"/> while visible.
+/// the faith, finished shrines, food (the live stock from <see cref="SettlementView.Food"/> and what the members eat
+/// a day from the <see cref="SettlementDetail"/>), what the settlement knows (every concept a member knows, with
+/// holder counts and a marker when a written record of it lies on its land) and its buildings, both from the detail
+/// through <see cref="SettlementKnowledge"/> (cached per in-game day), and its recent Chronicle entries (entries that
+/// name it). Refreshes every <see cref="RefreshSeconds"/> while visible.
 /// </summary>
 public partial class SettlementPanel : PanelContainer
 {
@@ -34,6 +36,8 @@ public partial class SettlementPanel : PanelContainer
     private GridContainer _knowledge = null!;
     private readonly List<(Label Name, ProgressBar Bar)> _knowledgeRows = new();
     private Label _knowledgeSummary = null!;
+    private Label _food = null!;
+    private int _shownVersion = -1, _shownSettlement = -1;
     private readonly StringBuilder _sb = new();
     private double _since = double.MaxValue;
     private int _pickerVersion = -1;
@@ -46,11 +50,21 @@ public partial class SettlementPanel : PanelContainer
     public string BodyText => _body?.GetParsedText() ?? "";
     public string StanceText => _stance?.Text ?? "";
     public string KnowledgeText => _knowledgeSummary?.Text ?? "";
+    public string FoodText => _food?.Text ?? "";
+
+    /// <summary>Knowledge rows as last rendered: "concept holders/members [written]" (tests).</summary>
+    public IEnumerable<string> KnowledgeRows => _knowledgeRows.Where(r => r.Name.Visible).Select(r => (string)r.Bar.GetMeta("row", ""));
+
+    /// <summary>Concepts listed in the panel at most.</summary>
+    public const int MaxConceptRows = 12;
+
+    /// <summary>Name colour of a concept with a written record on the settlement's land.</summary>
+    public static readonly Color RecordColour = new(0.98f, 0.82f, 0.45f);
     public SettlementView? View { get; private set; }
 
     public override void _Ready()
     {
-        CustomMinimumSize = new Vector2(360, 0);
+        CustomMinimumSize = new Vector2(360, 560); // C1: tall enough for food, the concept list and the god's standing
         MouseFilter = MouseFilterEnum.Stop;
         var outer = new VBoxContainer();
         outer.AddThemeConstantOverride("separation", 6);
@@ -87,7 +101,8 @@ public partial class SettlementPanel : PanelContainer
         _leader.Pressed += () => { if (_leaderId >= 0) LeaderRequested?.Invoke(_leaderId); };
         leaderRow.AddChild(_leader);
 
-        box.AddChild(new Label { Text = "The god", ThemeTypeVariation = "HeaderLabel" });
+        var godHeader = new Label { Text = "The god", ThemeTypeVariation = "HeaderLabel" };
+        box.AddChild(godHeader);
         var god = new GridContainer { Name = "God", Columns = 3 };
         box.AddChild(god);
         (_favour, _favourValue) = Bar(god, "Favour", "How much the people here love the god (−1 hate … +1 love)");
@@ -96,6 +111,10 @@ public partial class SettlementPanel : PanelContainer
         _awe.AddThemeStyleboxOverride("fill", Fill(OverlayColors.Fearful));
         _stance = new Label { Name = "Stance", AutowrapMode = TextServer.AutowrapMode.WordSmart };
         box.AddChild(_stance);
+
+        box.AddChild(new Label { Text = "Food", ThemeTypeVariation = "HeaderLabel" });
+        _food = new Label { Name = "Food", AutowrapMode = TextServer.AutowrapMode.WordSmart, MouseFilter = MouseFilterEnum.Pass, TooltipText = "Food units: one unit restores about a third of a person's hunger. Stock = the shared pile and storehouses plus what the members carry." };
+        box.AddChild(_food);
 
         box.AddChild(new Label { Text = "Knowledge", ThemeTypeVariation = "HeaderLabel" });
         _knowledgeSummary = new Label { Name = "KnowledgeSummary", Modulate = new Color(1, 1, 1, 0.8f), AutowrapMode = TextServer.AutowrapMode.WordSmart };
@@ -109,6 +128,8 @@ public partial class SettlementPanel : PanelContainer
             CustomMinimumSize = new Vector2(320, 0),
         };
         box.AddChild(_body);
+        // C1: food and knowledge come first (the panel is short); the god's standing follows, then buildings and events.
+        foreach (var node in new Control[] { godHeader, god, _stance, _body }) box.MoveChild(node, box.GetChildCount() - 1);
         Visible = false;
     }
 
@@ -202,8 +223,10 @@ public partial class SettlementPanel : PanelContainer
         _stance.Text = _sb.ToString();
         _stance.Modulate = OverlayColors.Stance(v.Stance).Lerp(Colors.White, 0.45f);
 
-        RenderKnowledge();
-        RenderChronicle(v.Name);
+        var entry = Knowledge?.Get(v.Id);
+        RenderFood(v, entry);
+        RenderKnowledge(entry);
+        RenderChronicle(v.Name, entry);
     }
 
     private void RefreshPicker(ReadOnlySpan<SettlementView> all)
@@ -226,22 +249,42 @@ public partial class SettlementPanel : PanelContainer
         if (_picker.Selected != at) _picker.Select(at);
     }
 
-    private void RenderKnowledge()
+    private void RenderFood(in SettlementView v, SettlementKnowledge.Entry? e)
     {
-        var e = Knowledge?.Get(SettlementId);
+        _sb.Clear();
+        _sb.Append($"{v.Food:0} in store");
+        if (e is not null && e.Detail.FoodPerDay > 0f)
+        {
+            float perDay = e.Detail.FoodPerDay;
+            _sb.Append($",  eats about {perDay:0.#} a day");
+            _sb.Append(v.Food / perDay < 1f ? "  (under a day of stock)" : $"  (about {v.Food / perDay:0} days of stock)");
+        }
+        else if (e is null) _sb.Append(",  daily use not loaded yet");
+        _food.Text = _sb.ToString();
+    }
+
+    private void RenderKnowledge(SettlementKnowledge.Entry? e)
+    {
         if (e is null)
         {
-            _knowledgeSummary.Text = Knowledge?.Sampling == SettlementId ? "Asking the people…" : "Not sampled yet.";
+            _knowledgeSummary.Text = Knowledge?.IsRequesting(SettlementId) == true ? "Asking the settlement…" : "Not loaded yet.";
             foreach (var r in _knowledgeRows) { r.Name.Visible = r.Bar.Visible = false; }
+            _shownVersion = -1;
             return;
         }
-        var top = e.Top(8);
-        _knowledgeSummary.Text = e.Sampled == 0
-            ? "Nobody answered yet."
-            : $"{e.Concepts.Count} concepts known among {e.Sampled} of {e.Members} adults asked (bar: share of them who know it).";
+        if (_shownVersion == Knowledge!.Version && _shownSettlement == SettlementId) return;
+        _shownVersion = Knowledge.Version;
+        _shownSettlement = SettlementId;
+        var d = e.Detail;
+        var top = e.Top(MaxConceptRows);
+        int recorded = e.Recorded;
+        _knowledgeSummary.Text = d.Concepts.Count == 0
+            ? "Knows no concepts yet."
+            : $"Knows {d.Concepts.Count} concepts, {recorded} written down here (gold). Bar: share of its {d.Members} people"
+              + (d.Concepts.Count > top.Count ? $", top {top.Count}." : ".");
         while (_knowledgeRows.Count < top.Count)
         {
-            var name = new Label { CustomMinimumSize = new Vector2(130, 0), ClipText = true };
+            var name = new Label { CustomMinimumSize = new Vector2(130, 0), ClipText = true, MouseFilter = MouseFilterEnum.Pass };
             var bar = new ProgressBar { MinValue = 0, MaxValue = 1, Step = 0.01, ShowPercentage = false, CustomMinimumSize = new Vector2(180, 10), SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ShrinkCenter };
             _knowledge.AddChild(name);
             _knowledge.AddChild(bar);
@@ -253,26 +296,43 @@ public partial class SettlementPanel : PanelContainer
             bool on = i < top.Count;
             name.Visible = bar.Visible = on;
             if (!on) continue;
-            name.Text = top[i].Key;
-            bar.Value = e.Sampled > 0 ? top[i].Value.Knowers / (float)e.Sampled : 0;
-            bar.TooltipText = $"{top[i].Value.Knowers} of {e.Sampled} know {top[i].Key}; best proficiency {top[i].Value.Best:0.00}";
+            var c = top[i];
+            name.Text = c.ConceptId;
+            name.Modulate = c.HasRecord ? RecordColour : Colors.White;
+            bar.Value = d.Members > 0 ? c.Holders / (float)d.Members : 0;
+            string tip = $"{c.Holders} of {d.Members} know {c.ConceptId}; best proficiency {c.BestProficiency:0.00}; "
+                + (c.HasRecord ? "a written record of it is kept here" : "no written record here");
+            bar.TooltipText = name.TooltipText = tip;
+            bar.SetMeta("row", $"{c.ConceptId} {c.Holders}/{d.Members}{(c.HasRecord ? " written" : "")}");
         }
     }
 
-    private void RenderChronicle(string name)
+    private void RenderChronicle(string name, SettlementKnowledge.Entry? e)
     {
         _sb.Clear();
+        if (e is not null)
+        {
+            _sb.Append("[b]Buildings[/b]  ");
+            if (e.Detail.Buildings.Count == 0) _sb.Append("none finished");
+            for (int i = 0; i < e.Detail.Buildings.Count; i++)
+            {
+                var b = e.Detail.Buildings[i];
+                if (i > 0) _sb.Append(",  ");
+                _sb.Append(b.Count).Append(' ').Append(b.Kind.Replace('-', ' ')).Append(b.Count == 1 ? "" : "s");
+            }
+            _sb.Append("\n\n");
+        }
         _sb.Append("[b]Recent events[/b]\n");
         int shown = 0;
         if (Log is { } log)
             for (int i = log.Count - 1; i >= 0 && shown < 6; i--)
             {
-                var e = log[i];
-                if (!e.Text.Contains(name, StringComparison.Ordinal)) continue;
+                var entry = log[i];
+                if (!entry.Text.Contains(name, StringComparison.Ordinal)) continue;
                 shown++;
-                _sb.Append("  • ").Append(e.Text.Replace("[", "[lb]")).Append('\n');
+                _sb.Append("  • ").Append(entry.Text.Replace("[", "[lb]")).Append('\n');
             }
-        if (shown == 0) _sb.Append("  none recorded since you arrived\n");
+        if (shown == 0) _sb.Append("  none in the Chronicle\n");
         _body.Text = _sb.ToString();
     }
 

@@ -14,8 +14,8 @@ merge; keep the "Now" block at the top current. Numbers here are measured on Ant
 - **Next per plan:** M8 scale (asset export, hitches, population ~2,000 by year 120); art follow-ups
   (clouds, animals, bridges, less chibi characters); knowledge roadmap items 4–6. Worker deploy needs Antoine's go-ahead.
 - **Checks:** `./scripts/check.sh` = contracts (5 schemas, 19 fixtures, concepts.json 95 concepts),
-  268 Eden.Sim tests (~3.5 min; the Slow society test is capped at 150 years), 53 Eden.Game gdUnit4
-  tests, headless boot, 85 Worker tests.
+  279 Eden.Sim tests (~4–5 min; the Slow society test is capped at 150 years), 58 Eden.Game gdUnit4
+  tests, headless boot, 85 Worker tests (C1 branch numbers).
 - **Known slow spot:** the three Slow Sim tests (population, society, pacing) take about 3 minutes
   together; the full in-band pacing test runs only with `EDEN_PACE_FULL=1` (~40 min).
 - **Not deployed:** the Worker runs only through `wrangler dev` on localhost.
@@ -373,3 +373,39 @@ three background thinkers on (that is why thinkers are off in the check now).
 
 **Not done / notes.** The scripted check plans its own A* route over the heightmap (a player steers by eye). Buildings
 and trees do not block the body; possession needs the real sim (fake sim falls back). See backlog.
+
+## 2026-11-07 — C1 contract pass: settlements and the Chronicle (branch c1-contract-pass)
+
+**What.** The pre-approved contract additions and nothing else: `SettlementView.Food` and `.TerritoryRadius`
+(appended, defaulted), `SettlementDetail` / `SettlementConceptView` / `BuildingCount` with
+`IWorldSnapshot.TryGetSettlementDetail` and `WatchSettlementCommand`, and `IWorldSnapshot.ChronicleSince`
+(`NewChronicle` kept). Sim: `World.SettlementDetail.cs` (food per settlement, watch list of 8, detail build),
+`World.ChronicleSave.cs` (`CHRN` section), ring 512 → 2,048 with a shared published copy, one `Apply` case, one
+registration line each in `SaveWriter` / `SaveReader`. Client: the settlement panel shows live food and daily eating,
+"Knows N concepts, M written down here" with holder bars and gold names for recorded concepts, and buildings
+(`SettlementKnowledge` now caches details; the member sampling is deleted); the overlay draws each settlement's
+`TerritoryRadius` and colours knowledge by holders / members; `ChronicleLog` reads `ChronicleSince` (no burst loss,
+history from a save after a load); the inspector shows who taught each concept when the memory survives ("from Ada").
+`FakeSimHost` fills everything with stable made-up numbers. Details: `contracts/README.md` (C1 table and request
+pattern), `40-game-client.md` "M7 UI as built", DECISIONS 2026-11-07 "C1: …".
+
+**How verified.**
+
+- `./scripts/check.sh` green from the worktree root: contracts, 279 Eden.Sim tests (was 268: +5 `SettlementViewTests`,
+  +6 `ChronicleHistoryTests`), 58 Eden.Game gdUnit4 tests (was 53: +4 `ChronicleTests`, +1 `MythUiTests`; the sampling
+  test became the detail test), headless boot, 85 Worker tests.
+- No state-hash change: two runs of 10,000 ticks with snapshots every 50 ticks, one also requesting every settlement's
+  detail and reading the whole history, end on the same hash; save/load round trips keep the hash; a save without the
+  section still loads.
+- Numbers (headless, `World` only): seed 2 year 50 has 8 settlements and 342 Chronicle entries; Calton 26 people eat
+  ≈ 36 food a day against single-digit stock (they eat from what they carry and gather daily), 57 concepts, no
+  records on its land. Seed 20 year 120: 1,442 people, 12 settlements, ring full (2,048), ≈ 350 KB of entries retained,
+  12 details built in 12 ms on a cold JIT (Sunridge: 271 people, 81 concepts).
+- Screenshots: [settlement panel with real food and knowledge, seed 2 year 51](art/shots/ui-c1-settlement-seed2-y51.jpg)
+  (`--seed=2 --year=50 --hour=10 --ui=settlement:1`), [Chronicle right after loading the seed 2 year 50 save, 345 entries
+  back to year 0](art/shots/ui-c1-chronicle-after-load.jpg) (`--load-world=… --ui=chronicle`).
+
+**Not done.** No settlement had a written record on its land in the two seeds shot, so the gold record marker is only
+covered by tests and the fake sim. `SettlementView.Members` (daily clustering) and the detail's live member count can
+differ by one or two between daily passes. The settlement panel's minimum height grew to 560 px (it overlaps the
+dialogue panel at 900 px only while both are open).

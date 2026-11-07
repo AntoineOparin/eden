@@ -43,6 +43,7 @@ public partial class Main
             ui.Frame = () => _frame;
             ui.Overlay = Territory;
             Territory.Knowledge = ui.Knowledge;
+            ui.Knowledge.Enqueue = c => Host?.Enqueue(c); // C1: WatchSettlementCommand
             ui.FocusRequested += p => CameraRig?.Focus(new Vector2(p.X, p.Z));
             ui.NpcRequested += Select;
         }
@@ -177,12 +178,12 @@ public partial class Main
             if (d < bestD && b.SettlementId >= 0) { bestD = d; best = b.SettlementId; }
         }
         if (best >= 0) return best;
-        float r = Territory?.Radius ?? TerritoryOverlay.DefaultRadius;
-        bestD = r * r;
+        float bestRatio = 1f; // nearest centre relative to its own territory radius (C1: the sim's radius per settlement)
         foreach (var v in _frame.Settlements.Span)
         {
-            float d = (v.X - x) * (v.X - x) + (v.Z - z) * (v.Z - z);
-            if (d < bestD) { bestD = d; best = v.Id; }
+            float r = Territory?.RadiusOf(v) ?? TerritoryOverlay.RadiusFor(v, TerritoryOverlay.DefaultRadius);
+            float ratio = ((v.X - x) * (v.X - x) + (v.Z - z) * (v.Z - z)) / (r * r);
+            if (ratio < bestRatio) { bestRatio = ratio; best = v.Id; }
         }
         return best >= 0 ? best : null;
     }

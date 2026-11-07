@@ -105,24 +105,50 @@ public class MythUiTests
     }
 
     [TestCase]
-    public void Settlement_knowledge_samples_members_and_caches_per_day()
+    public void Settlement_knowledge_comes_from_the_detail_and_caches_per_day()
     {
         using var host = new FakeSimHost(200);
         var s = host.Latest;
-        var k = new SettlementKnowledge { SampleSize = 6 };
+        var sent = new List<WorldCommand>();
+        var k = new SettlementKnowledge { Enqueue = sent.Add };
         AssertThat(k.IsStale(3, s.Tick)).IsTrue();
         k.Want(3, first: true);
-        for (int i = 0; i < 4 && k.Get(3) is null; i++) k.Update(s, 0.25);
+        k.Update(s, 0.25);
+        AssertThat(sent.OfType<WatchSettlementCommand>().Select(c => c.Id).ToList()).Contains(3);
         var e = k.Get(3);
         AssertThat(e).IsNotNull();
-        AssertThat(e!.Sampled).IsGreater(0);
-        AssertThat(e.Sampled).IsLessEqual(6);
+        AssertThat(s.TryGetSettlementDetail(3, out var d)).IsTrue();
+        AssertThat(e!.Members).IsEqual(d.Members);
+        AssertThat(e.Members).IsEqual(s.Settlements.Span[3].Members);
         AssertThat(e.Concepts.ContainsKey("fire")).IsTrue();
+        AssertThat(e.Concepts["fire"].Holders).IsEqual(e.Members); // everyone in the fake knows fire
         AssertThat(e.Concepts.Count).IsGreater(3); // fake settlement 3 knows up to 9 concepts
+        AssertThat(e.Recorded).IsGreater(0);
         AssertThat(k.IsStale(3, s.Tick)).IsFalse();
         var top = e.Top(3);
         AssertThat(top.Count).IsEqual(3);
-        AssertThat(top[0].Value.Knowers).IsGreaterEqual(top[2].Value.Knowers);
+        AssertThat(top[0].Holders).IsGreaterEqual(top[2].Holders);
+        AssertThat(d.FoodPerDay).IsGreater(0f);
+        AssertThat(d.Food).IsEqual(s.Settlements.Span[3].Food);
+        AssertThat(k.Get(4)).IsNull(); // only what was asked for
+    }
+
+    [TestCase]
+    public void Inspector_reads_the_teacher_from_memories()
+    {
+        var teachers = new Dictionary<string, string>();
+        NpcInspector.LearnedFrom(
+        [
+            new MemoryView(30, "conversation", "Ada taught me stone knapping.", 3),
+            new MemoryView(10, "conversation", "Bo showed me herding.", 3),
+            new MemoryView(40, "discovery", "I learned writing from the written records.", 3),
+            new MemoryView(50, "conversation", "Cy taught me stone knapping.", 3), // later: the first teacher wins
+            new MemoryView(5, "speech", "Dee became the leader of Ashford.", 6),
+        ], teachers);
+        AssertThat(NpcInspector.TeacherOf("stone-knapping", teachers)).IsEqual("Ada");
+        AssertThat(NpcInspector.TeacherOf("animal-herding", teachers)).IsEqual("Bo");
+        AssertThat(NpcInspector.TeacherOf("writing", teachers)).IsEqual("the records");
+        AssertThat(NpcInspector.TeacherOf("pottery", teachers)).IsNull();
     }
 
     [TestCase]
@@ -134,7 +160,10 @@ public class MythUiTests
         AssertThat(OverlayColors.Religion(null)).IsEqual(OverlayColors.NoFaith);
         AssertThat(OverlayColors.Knowledge(1f)).IsEqual(OverlayColors.KnowsAll);
         AssertThat(OverlayColors.Knowledge(0f)).IsEqual(OverlayColors.KnowsNone);
-        AssertThat(TerritoryOverlay.DefaultRadius).IsEqual(64f); // SettlementRadius 40 × TerritoryFactor 1.6
+        AssertThat(TerritoryOverlay.DefaultRadius).IsEqual(64f); // fallback: SettlementRadius 40 × TerritoryFactor 1.6
+        float fallback = TerritoryOverlay.DefaultRadius;
+        AssertThat(TerritoryOverlay.RadiusFor(new SettlementView(0, "a", 0, 0, 1, -1, -1, 0, 0, 0, 0, -1, -1, GodStance.Neutral, null, 10f, 75f), fallback)).IsEqual(75f);
+        AssertThat(TerritoryOverlay.RadiusFor(new SettlementView(0, "a", 0, 0, 1, -1, -1, 0, 0, 0, 0, -1, -1, GodStance.Neutral, null), fallback)).IsEqual(64f);
         AssertThat(PowerTargets.IsGround(GodPower.RaiseTerrain)).IsTrue();
         AssertThat(PowerTargets.IsPerson(GodPower.Bless)).IsTrue();
         AssertThat(PowerTargets.IsGround(GodPower.Select)).IsFalse();
@@ -228,7 +257,11 @@ public class MythUiTests
         for (int i = 0; i < 60 && ui.Knowledge.Get(land.SettlementId) is null; i++) await runner.SimulateFrames(1);
         await runner.AwaitMillis(600);
         await runner.SimulateFrames(2);
-        AssertThat(ui.Settlement.KnowledgeText).Contains("concepts known");
+        AssertThat(ui.Settlement.KnowledgeText).Contains("Knows").Contains("concepts").Contains("written down");
+        AssertThat(ui.Settlement.KnowledgeText).NotContains("asked");
+        AssertThat(ui.Settlement.FoodText).Contains("in store").Contains("a day");
+        AssertThat(ui.Settlement.KnowledgeRows.First()).StartsWith("foraging"); // everyone knows foraging and fire
+        AssertThat(ui.Settlement.BodyText).Contains("Buildings").Contains("hut");
         AssertThat(main.SettlementAt(s.Settlements.Span[1].X, s.Settlements.Span[1].Z) ?? -1).IsEqual(s.Settlements.Span[1].Id);
 
         // Overlay: one disc per settlement, tinted by stance.
@@ -237,14 +270,22 @@ public class MythUiTests
         AssertThat(main.Territory.Visible).IsTrue();
         AssertThat(main.Territory.DiscCount).IsEqual(FakeSimHost.SettlementCount);
         var sv = main.Host.Latest.Settlements.Span[0];
+        AssertThat(main.Territory.DrawnRadiusOf(5)).IsEqual(FakeSimHost.FakeTerritoryRadius(5)); // the sim's radius, not SimConfig
         AssertThat(main.Territory.TintOf(sv.Id)).IsEqual(OverlayColors.Stance(sv.Stance));
         AssertThat(ui.LegendLabels).Contains("favourable", "hostile");
         ui.SetOverlay(OverlayMode.Religion);
         main.Territory.Refresh(main.Host.Latest);
         AssertThat(main.Territory.TintOf(sv.Id)).IsEqual(OverlayColors.Religion(sv.ReligionName));
         ui.SetOverlay(OverlayMode.Knowledge, "fire");
+        for (int i = 0; i < 20 && FakeSimHost.SettlementCount > Enumerable.Range(0, FakeSimHost.SettlementCount).Count(k => ui.Knowledge.Get(k) is not null); i++)
+        {
+            await runner.AwaitMillis(100);
+            await runner.SimulateFrames(1);
+        }
         main.Territory.Refresh(main.Host.Latest);
         AssertThat(main.Territory.Concept).IsEqual("fire");
+        AssertThat(main.Territory.CaptionOf(sv.Id)).Contains($"{sv.Members}/{sv.Members} know fire");
+        AssertThat(main.Territory.TintOf(sv.Id)).IsEqual(OverlayColors.Knowledge(1f));
         ui.SetOverlay(OverlayMode.Off);
         AssertThat(main.Territory.Visible).IsFalse();
 
@@ -257,6 +298,7 @@ public class MythUiTests
         var values = rows.Select(r => double.Parse(r[(r.LastIndexOf(' ') + 1)..], System.Globalization.CultureInfo.InvariantCulture)).ToList();
         for (int i = 1; i < values.Count; i++) AssertThat(values[i]).IsLessEqual(values[i - 1]);
         AssertThat(inspector.BodyText).Contains("myth·2");
+        AssertThat(inspector.KnowledgeTeachers.ToList()).Contains($"fire: from {FakeWorldSnapshot.NameOf((land.Id + 11) % 300)}");
 
         // Everything M7 added hides with one switch (for possession).
         ui.Visible = false;

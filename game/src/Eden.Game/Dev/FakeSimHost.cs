@@ -11,6 +11,8 @@ namespace Eden.Game.Dev;
 /// <see cref="SetTimeScaleCommand"/>. M7 UI: six fake settlements (centre = where their first member started) with a
 /// god standing that bless / curse / lightning / gifts nudge, a Chronicle entry per god command, and a few made-up
 /// Chronicle entries of every kind each in-game day so the timeline has something to show. Other commands are ignored.
+/// C1: settlement food and territory radius, settlement details (in <see cref="FakeWorldSnapshot"/>) and a bounded
+/// Chronicle history for <see cref="IWorldSnapshot.ChronicleSince"/>, all made up but stable.
 /// </summary>
 public sealed class FakeSimHost : ISimHost, IIntentionSink
 {
@@ -32,6 +34,11 @@ public sealed class FakeSimHost : ISimHost, IIntentionSink
     private volatile bool _running;
     private Thread? _thread;
     private List<ChronicleEntry> _pendingChronicle = new();
+
+    // C1: Chronicle history (oldest first, bounded like the real sim's) and the copy shared by snapshots.
+    public const int HistorySize = 2048;
+    private readonly List<ChronicleEntry> _history = new();
+    private ChronicleEntry[] _publishedHistory = [];
 
     // M7 UI: fake settlements and their god standing (sim thread only, after construction).
     public const int SettlementCount = 6;
@@ -249,10 +256,21 @@ public sealed class FakeSimHost : ISimHost, IIntentionSink
             float fear = Math.Clamp(_awe[favoured] - _awe[k], 0f, 1f) * 0.5f;
             var stance = _favour[k] > 0.15f ? GodStance.Favourable : _awe[k] >= 0.35f ? GodStance.Fearful : _favour[k] < -0.15f ? GodStance.Hostile : GodStance.Neutral;
             views[k] = new SettlementView(k, SettlementNames[k], _setX[k], _setZ[k], members[k], k / 2, leader[k],
-                _favour[k], _awe[k], envy, fear, envy > 0.05f ? favoured : -1, fear > 0.05f && favoured != k ? favoured : -1, stance, SettlementFaiths[k]);
+                _favour[k], _awe[k], envy, fear, envy > 0.05f ? favoured : -1, fear > 0.05f && favoured != k ? favoured : -1, stance, SettlementFaiths[k],
+                FakeFood(k, members[k]), FakeTerritoryRadius(k));
         }
         return views;
     }
+
+    /// <summary>C1: made-up food stock, stable within an in-game day: 2–6 days of eating.</summary>
+    private float FakeFood(int k, int members)
+    {
+        int day = (int)(_tick / (TicksPerHour * HoursPerDay));
+        return MathF.Round(FakeWorldSnapshot.FakeFoodPerDay(members) * (2f + 4f * IslandGenerator.Hash01(k, day, 5)), 1);
+    }
+
+    /// <summary>C1: made-up territory radius per settlement (the real sim uses one radius for all).</summary>
+    public static float FakeTerritoryRadius(int k) => 52f + 4f * k;
 
     private void Step()
     {
@@ -302,10 +320,16 @@ public sealed class FakeSimHost : ISimHost, IIntentionSink
         }
         var chronicle = _pendingChronicle;
         _pendingChronicle = new List<ChronicleEntry>();
+        if (chronicle.Count > 0)
+        {
+            _history.AddRange(chronicle);
+            if (_history.Count > HistorySize) _history.RemoveRange(0, _history.Count - HistorySize);
+            _publishedHistory = _history.ToArray();
+        }
         long ticksPerDay = TicksPerHour * HoursPerDay, ticksPerYear = ticksPerDay * DaysPerYear;
         return new FakeWorldSnapshot(_tick, (int)(_tick / ticksPerYear), (int)(_tick % ticksPerYear / ticksPerDay),
             (float)(_tick % ticksPerDay) / TicksPerHour, _info, _heights, _biomes, views, chronicle, _resources,
-            settlements: SettlementViews());
+            settlements: SettlementViews(), history: _publishedHistory);
     }
 
     /// <summary>

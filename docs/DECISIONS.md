@@ -431,6 +431,8 @@ pass may not edit. Without the merge the timeline silently lost entries at 10× 
 **Evidence.** `SettlementViewTests` (3), `MythUiTests.Chronicle_log_*`.
 **Revisit when.** A contract change is allowed: `NewChronicle` could carry everything since the previous *read*, and a
 `TerritoryRadius` field would let the overlay stop reading `SimConfig` defaults.
+→ Done in C1 (2026-11-07): `ChronicleSince` and `SettlementView.TerritoryRadius`; see "C1: Chronicle history …" and
+"C1: settlement detail …" below.
 
 ## 2026-11-06 — M7 UI: settlement knowledge is sampled, not complete
 **Decision.** "What a settlement knows" (settlement panel, knowledge-spread overlay) is estimated from a sample of
@@ -441,6 +443,7 @@ asking for every member would evict them. No contract field carries per-settleme
 **Evidence.** `MythUiTests.Settlement_knowledge_samples_members_and_caches_per_day`; seed 2 year 51 shows "57 concepts
 known among 8 of 11 adults asked".
 **Revisit when.** The sim exposes per-settlement knowledge (a contract row in the backlog).
+→ Done in C1 (2026-11-07): `SettlementDetail` replaced the sampling; see "C1: settlement detail …" below.
 
 ## 2026-11-06 — M7 UI: drawn power icons, overlay as draped discs, local effects only
 **Decision.** The ten new toolbar icons (person, paw, sprout, rain, drought, raise, lower, star, skull, basket) and
@@ -518,3 +521,60 @@ Possession is never saved: the save writes "nobody" and a load releases.
 small additive Mind method (the Spotlight already excluded the possessed NPC, no change there).
 **Evidence.** `PossessionTests` (both projects), `PossessedDialogueTests`.
 **Revisit when.** More verbs (trade, court) or a radial menu.
+
+## 2026-11-07 — C1: settlement detail on request, watch list of 8, what replaced the sampling
+**Decision.** `SettlementDetail` is built by the sim (`World.SettlementDetail.cs`) only for a watch list of 8
+settlements (`World.MaxWatchedSettlements`, least recently requested dropped first), fed by a missed
+`TryGetSettlementDetail` or by `WatchSettlementCommand`, like the NPC watch list (32). A new request is built in the next
+snapshot; a cached detail is refreshed once it is an in-game hour old, at most one refresh per snapshot (the oldest).
+Concepts count every member with proficiency > 0; `HasRecord` = a written record holding the concept inside the
+territory circle or in one of the settlement's buildings; buildings count finished ones only. The client's
+`SettlementKnowledge` keeps its per-in-game-day cache (6 s real-time floor) but now holds whole details, asks for at
+most 4 at a time, and drops a request after 3 s (paused sim, abandoned settlement) to ask again later. The member
+sample (leader + up to 7 adults through `TryGetNpcDetail`) and the "N of M adults asked" wording are gone; the panel
+says "Knows N concepts, M written down here", bars are holders / members, and the knowledge overlay colours by the same
+share. `Food` = shared stock + what living members carry (households have no larder in the sim); `FoodPerDay` = what
+the members eat a day at the sim's rates (need decay / food per unit, children 0.85, infants 0.8), not the net change of
+the stock, so it needs no new sim state.
+**Why.** Asking members evicted the inspector's and the Mind's watched NPCs and gave an estimate. A settlement scan
+touches every member's concepts (≈1 ms for a 270-person town at seed 20 year 120; 12 settlements in 12 ms with JIT), so
+it must not run for every settlement every snapshot: 8 covers the open panel plus a few overlay requests, and the
+one-refresh-per-snapshot cap keeps 100×–500× batches from rebuilding all eight per frame. A net-change figure would need
+a daily snapshot of yesterday's stock in hashed or saved state, which this pass may not add.
+**Evidence.** `SettlementViewTests` (detail appears a snapshot later, contents match the sim, bound of 8, no state-hash
+change over 10,000 ticks with requests), `MythUiTests.Settlement_knowledge_comes_from_the_detail_and_caches_per_day`,
+`Main_scene_wires_…` (panel, overlay caption and tint); seed 2 year 51 Calton: "Knows 57 concepts", 37.5 food a day.
+**Revisit when.** The overlay must show more than ~16 settlements fresh at once at 500× (raise the bound or add a
+compact per-settlement concept bitmask to `SettlementView`), or the panel should show a trend (add a saved daily stock).
+
+## 2026-11-07 — C1: Chronicle history of 2,048 entries, its own save section, and how the client reads it
+**Decision.** The sim's Chronicle ring grew from 512 to 2,048 (`World.ChronicleHistorySize`). Snapshots share one
+immutable oldest-first copy that is rebuilt only after a new entry (16 KB of references), and
+`IWorldSnapshot.ChronicleSince(tick)` filters it. The history is saved as its own tagged section `CHRN` (same framing as
+the body sections) by `World.ChronicleSave.cs`, registered with one line in `SaveWriter.Write` (after `WriteBody`) and
+one in `SaveReader.ReadInto` (after `ReadBody`, which keeps unknown tags); a save without it loads as before. "load"
+notices are not written (session-only, and saving a freshly loaded world stays byte-identical); on load the restored
+history replaces the ring and the new load notice stays last. Restored entries are history, not news: they do not
+reappear in `NewChronicle`. The client's `ChronicleLog` asks `ChronicleSince(lastTick − 1)` per new snapshot (god
+commands run between ticks, so an entry can carry an already-read tick; the tick/text rule drops repeats) and, when it
+meets a new `load` entry, clears itself and takes the sim's whole history. Not hashed: the Chronicle never feeds a tick.
+**Why.** The brief; 32 entries was too few at 500× and history before the session was lost. Cost measured at seed 20
+year 120 (1,442 people, ring full): about 350 KB of entries retained (strings dominate) + 16 KB ring + one 16 KB copy
+per snapshot that saw a new entry; the section adds ≈ 0.2 MB to a 21 MB save (uncompressed; M8 is compressing saves).
+**Evidence.** `ChronicleHistoryTests` (6, Eden.Sim), `ChronicleTests` (4, Eden.Game: 100 entries over several unread
+snapshots all kept, same-tick entry after a read neither lost nor doubled, a load brings the saved history and drops the
+replaced world's entries, fake host history); screenshot of the Chronicle after loading seed 2 year 50 (345 entries).
+**Revisit when.** M8 reshapes the save container (the section pair moves with it), or players want more than 2,048
+entries of history (the client log keeps 5,000).
+
+## 2026-11-07 — C1: the inspector's "learned from" comes from memories, not a contract field
+**Decision.** Roadmap 51 item 6's last bullet is shown without a contract change: `NpcInspector.LearnedFrom` parses the
+memories the sim already writes when a concept is first learned ("Ada taught me pottery.", "… told me …", "… showed
+me …", "I learned writing from the written records.") from `NpcDetail.Memories`, and `TeacherOf` matches the remembered
+words to the concept id (hyphens as spaces, or the id's last words: "herding" for `animal-herding`). Shown as a third
+column "from Ada" / "from the records"; empty when the memory was forgotten or summarised.
+**Why.** `NpcDetail.Knowledge` is a concept → proficiency dictionary with no room for a teacher; adding one is another
+contract change the brief did not pre-approve. The memory is exactly "when memory knows it".
+**Evidence.** `MythUiTests.Inspector_reads_the_teacher_from_memories`, the main-scene inspector assertion.
+**Revisit when.** The memory texts change (keep the regexes in step) or an invented concept's name differs from its id
+in more than the last words (add teacher ids to the contract).

@@ -37,6 +37,7 @@ public static class SaveReader
         var body = new MemoryStream(r.ReadBytes((int)(buffer.Length - buffer.Position)));
         using var br = new BinaryReader(body, Encoding.UTF8);
         world.ReadBody(br);
+        world.ReadChronicleSection(body); // C1: restores the Chronicle history if the save has one (World.ChronicleSave.cs)
     }
 
     private static SaveHeader ReadHeader(BinaryReader r)

@@ -74,6 +74,12 @@ public enum GodStance : byte { Neutral, Favourable, Fearful, Hostile }
 /// −1..1, <see cref="Awe"/>, <see cref="Envy"/> and <see cref="Fear"/> 0..1; <see cref="EnviedId"/> /
 /// <see cref="FearedId"/> are the settlement that envy or fear points at, or -1 when the feeling is faint.
 /// <see cref="ReligionName"/> is the faith its faction follows, or null.
+/// <see cref="Food"/> (C1) is the food the settlement holds right now, in the sim's food units (one unit restores
+/// <c>SimConfig.FoodPerUnit</c> = 0.35 of a person's food need; an adult eats about 1.6 a day): its shared stock (the
+/// pile and storehouses) plus what its members carry (households keep no separate larder).
+/// <see cref="TerritoryRadius"/> (C1) is the radius in metres of the land the sim treats as the settlement's own
+/// (<c>SettlementRadius × TerritoryFactor</c>, the circle trespass and grievance use). Both are defaulted so older
+/// positional constructors keep compiling.
 /// </summary>
 public readonly record struct SettlementView(
     int Id,
@@ -85,7 +91,38 @@ public readonly record struct SettlementView(
     float Favour, float Awe, float Envy, float Fear,
     int EnviedId, int FearedId,
     GodStance Stance,
-    string? ReligionName);
+    string? ReligionName,
+    float Food = 0f,
+    float TerritoryRadius = 0f);
+
+/// <summary>
+/// What one settlement knows and owns (C1), built on request like <see cref="NpcDetail"/>: see
+/// <see cref="IWorldSnapshot.TryGetSettlementDetail"/>. <see cref="Members"/> and <see cref="Adults"/> (adults and
+/// elders) are counted when the detail was built. <see cref="Concepts"/> lists every concept at least one member knows
+/// (proficiency above 0), most holders first. <see cref="Buildings"/> counts the settlement's finished buildings by
+/// kind, most first. <see cref="Food"/> is the same quantity as <see cref="SettlementView.Food"/>;
+/// <see cref="FoodPerDay"/> is what the members eat in a day at the sim's rates (food need decay over food per unit,
+/// children and infants at their lower rates, awake all day: an upper bound), in the same units.
+/// </summary>
+public sealed record SettlementDetail(
+    int Id,
+    string Name,
+    int Members,
+    int Adults,
+    IReadOnlyList<SettlementConceptView> Concepts,
+    IReadOnlyList<BuildingCount> Buildings,
+    float Food,
+    float FoodPerDay);
+
+/// <summary>
+/// One concept in a <see cref="SettlementDetail"/>: how many members know it, the best proficiency among them (0..1)
+/// and whether a written record holding it lies on the settlement's land (within its territory radius, or in one of
+/// its buildings).
+/// </summary>
+public readonly record struct SettlementConceptView(string ConceptId, int Holders, float BestProficiency, bool HasRecord);
+
+/// <summary>Number of finished buildings of one kind (a <c>game/data/buildings.json</c> id).</summary>
+public readonly record struct BuildingCount(string Kind, int Count);
 
 /// <summary>
 /// Static world description; fixed for the lifetime of a world (terraforming updates the heightmap).
@@ -153,8 +190,20 @@ public interface IWorldSnapshot
     /// <summary>Living settlements with the god's standing (M7 UI), ordered by id. Rebuilt with every snapshot.</summary>
     ReadOnlyMemory<SettlementView> Settlements { get; }
 
-    /// <summary>Chronicle entries appended since the previous snapshot. Godot drains them each frame.</summary>
+    /// <summary>
+    /// Chronicle entries appended since the previous snapshot. Kept for compatibility: the sim may publish several
+    /// snapshots between two frames, so readers that must not miss entries use <see cref="ChronicleSince"/>.
+    /// </summary>
     IReadOnlyList<ChronicleEntry> NewChronicle { get; }
+
+    /// <summary>
+    /// C1: every Chronicle entry the sim still holds with <c>Tick &gt; tick</c>, oldest first (newest last). The sim
+    /// keeps a bounded history (2,048 entries in C1), saved with the world, so after a load this includes the history
+    /// from before the session. Entries can be added at the tick of the snapshot after it was published (god commands
+    /// run between ticks), so a reader that wants everything passes its last seen tick − 1 and drops duplicates by
+    /// tick and text. Allocates the returned list; call it once per frame at most.
+    /// </summary>
+    IReadOnlyList<ChronicleEntry> ChronicleSince(long tick);
 
     /// <summary>
     /// Inspector data. Details are built on request, not for every NPC every snapshot: the first call
@@ -163,4 +212,14 @@ public interface IWorldSnapshot
     /// panel is open; the sim keeps a bounded watch list (32 in M1).
     /// </summary>
     bool TryGetNpcDetail(int npcId, out NpcDetail detail);
+
+    /// <summary>
+    /// C1: settlement data for the settlement panel and the knowledge overlay, with the same "request now, present on
+    /// a later snapshot" semantics as <see cref="TryGetNpcDetail"/>: the first call for a living settlement that is
+    /// not watched returns false and asks the sim to watch it (as does <c>WatchSettlementCommand</c>), and snapshots
+    /// from the next batch on return true. The sim keeps a bounded watch list (8 in C1, least recently requested
+    /// dropped first) and refreshes a watched detail at most once per in-game hour (one refresh per snapshot).
+    /// Returns false for abandoned or unknown ids.
+    /// </summary>
+    bool TryGetSettlementDetail(int id, out SettlementDetail detail);
 }

@@ -2,8 +2,7 @@
 
 Items that an earlier milestone left out on purpose, decided differently from the plan, or
 flagged as a question. Each line says where it belongs. Whoever executes that milestone owns the
-item; remove it from here in the same PR that resolves it. Last updated 2026-11-07 by the M7 UI
-and M6 merges.
+item; remove it from here in the same PR that resolves it. Last updated 2026-11-07 by the C1 contract pass (after the M7 UI and M6 merges).
 
 ## Eden.Sim (from M1, `10-sim-core.md`)
 
@@ -43,9 +42,6 @@ and M6 merges.
 | Nova Roma extras not done: cartoon cumulus clouds, roads that follow the terrain, bridges, record stelae and shrine altars as own meshes | next art pass | A1 paints dirt yards and straight roads to the settlement centre and builds plinths/boats procedurally; the rest is open. |
 | One-off hitches: decor rebuild when a building completes (~65k-cell scan), impostor atlas readback at startup, first night shader variant | M8 | Visible as a single low sample in the 5,000-NPC run; averages stay within budget. |
 | Seed 20 at year 60 has ≈300 people, not the ≈1,000 spec 45 assumed | balance pass / spec 45 | Budgets were also measured at year 120 (see STATUS A1). |
-| Settlement panel has no food stock, and "what a settlement knows" is a sample of ≤ 8 adults | next contract pass | Needs `SettlementView.Food` and a per-settlement knowledge summary in the contract (DECISIONS "settlement knowledge is sampled"). |
-| Overlay territory is a 64 m circle from `SimConfig` defaults, not the sim's real land or its config | next contract pass | Add a radius (or a territory mask) to `SettlementView` if a run changes `SettlementRadius`/`TerritoryFactor`. |
-| Chronicle bursts of more than 32 entries between two frames lose the oldest ones; history before the session starts is not shown | next contract pass or save pass | `NewChronicle` covers only the last published snapshot; the client merges the 32-entry `RecentChronicle` tail. A "chronicle since tick" query or saved history would close it. |
 | Power effects have no screenshot; brush preview and effects were checked by hand and by `MythUiTests` (counts), not visually reviewed | next UI pass | Rain/drought tint, ripple, bless glow, curse smoke are CPU particles and one ring shader (`Fx/PowerFx.cs`). |
 | The display forces V-Sync (100–200 Hz) on this laptop now, so fps budgets read as the cap | M8 | `--log-frame-time` measures script and render CPU cost instead; Metal returns 0 for GPU time. |
 | `FakeSimHost` stays under `src/Eden.Game/Dev/` | keep | Useful for perf runs; `--fake-sim --npcs=N --log-fps --screenshot=PATH --quit-after=S` are the CLI flags; A1 added `--year=N --hour=H --focus=X,Z|town --paused --zoom=M --gallery --lineup --hide=Node,...`; M7 UI added `--ui=... --m7-check --log-frame-time`. |

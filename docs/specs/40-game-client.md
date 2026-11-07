@@ -104,14 +104,24 @@ and plays `Fx/PowerFx` effects. Everything else lives under the HUD's one `GodUi
 overlay mode + legend + concept picker; keys C, O, M): `ChroniclePanel` (`scenes/ui/chronicle.tscn`: 12 kind filters,
 importance slider, per-year density strip, newest 800 rows of a 5,000-entry `ChronicleLog`, click focuses the camera on
 the subject or the named settlement), `SettlementPanel` (`scenes/ui/settlement.tscn`: picker, faction members, leader
-link, favour / awe bars, stance, envied / feared neighbour, faith, finished shrines, sampled knowledge with bars, recent
-entries naming it; no food stock, the contract has none). `Overlay/TerritoryOverlay` tints each settlement's land by
-god standing, faith or knowledge of a concept (off by default). Inspector: settlement link, knowledge as proficiency
-bars (strongest 16), `myth·n` marker on memories with `Generation` > 0, and a `PossessRequested` hook for M6. Dev flags:
+link, favour / awe bars, stance, envied / feared neighbour, faith, finished shrines, food, knowledge, buildings, recent
+entries naming it). `Overlay/TerritoryOverlay` tints each settlement's land by god standing, faith or knowledge of a
+concept (off by default). Inspector: settlement link, knowledge as proficiency bars (strongest 16), `myth·n` marker on
+memories with `Generation` > 0, and a `PossessRequested` hook for M6.
+C1 (2026-11-07) replaced the estimates with contract data: the panel's food line is `SettlementView.Food` (live) and
+`SettlementDetail.FoodPerDay` ("eats about N a day, about D days"); "Knows N concepts, M written down here" lists the
+12 most shared concepts from `SettlementDetail.Concepts` (bar = holders / members, gold name = a written record on its
+land) and the buildings line comes from `SettlementDetail.Buildings`. `SettlementKnowledge` (shared with the overlay)
+asks for at most 4 details at a time (`WatchSettlementCommand` + `TryGetSettlementDetail`) and caches each per
+in-game day with a 6 s real-time floor; the member sampling is gone. The overlay disc radius is
+`SettlementView.TerritoryRadius`. `ChronicleLog` reads `ChronicleSince(lastTick − 1)` per new snapshot (no burst loss)
+and, on the first snapshot or a new `load` entry, takes the sim's whole saved history (up to 2,048 entries). The
+inspector shows who taught each concept ("from Ada", "from the records") when the NPC still has the memory the sim
+writes on first learning it (parsed from `NpcDetail.Memories`; no contract field). Dev flags:
 `--ui=chronicle,settlement[:id|town],overlay:stance|religion|knowledge[:concept],power:<name>,select:<id>`,
 `--m7-check` (`Dev/M7Check.cs`), `--log-frame-time` (`Dev/FrameTimeProbe.cs`, for when the display forces V-Sync).
 Panels refresh on timers (0.25–1 s), never per frame; while the sim is paused no new details arrive, so the leader name
-and knowledge sample wait for the next published snapshot.
+and a settlement detail not yet received wait for the next published snapshot.
 
 **Threading.** `Main._Process`: read `host.Latest` once, pass the same snapshot to every
 renderer and UI panel; never hold a snapshot across frames except for diffing.

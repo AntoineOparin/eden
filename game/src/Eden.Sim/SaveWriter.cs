@@ -25,5 +25,6 @@ public static class SaveWriter
         w.Write(header.Length);
         w.Write(header);
         world.WriteBody(w);
+        world.WriteChronicleSection(w); // C1: Chronicle history as its own tagged section (World.ChronicleSave.cs)
     }
 }

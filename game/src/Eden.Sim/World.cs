@@ -35,8 +35,11 @@ public sealed partial class World
     private SpatialGrid _grid;
     private readonly List<int> _pendingBirths = new(64);
     private readonly List<ChronicleEntry> _pendingChronicle = new();
-    private readonly ChronicleEntry[] _history = new ChronicleEntry[512];
+    /// <summary>C1: bounded Chronicle history behind <see cref="ChronicleTail"/> and <see cref="IWorldSnapshot.ChronicleSince"/>; saved (World.ChronicleSave.cs).</summary>
+    public const int ChronicleHistorySize = 2048;
+    private readonly ChronicleEntry[] _history = new ChronicleEntry[ChronicleHistorySize];
     private int _historyCount, _historyNext;
+    private ChronicleEntry[]? _publishedHistory; // oldest first, shared by snapshots until the next entry
     private readonly List<string> _log = new();
     private readonly ConcurrentQueue<int> _detailRequests = new();
     private readonly List<int> _watched = new();
@@ -129,6 +132,7 @@ public sealed partial class World
         _history[_historyNext] = e;
         _historyNext = (_historyNext + 1) % _history.Length;
         if (_historyCount < _history.Length) _historyCount++;
+        _publishedHistory = null;
     }
 
     /// <summary>The last <paramref name="max"/> Chronicle entries, oldest first (bounded history, not drained by snapshots).</summary>
@@ -176,12 +180,18 @@ public sealed partial class World
             if (TryBuildDetail(_watched[i], out var d)) details[_watched[i]] = d;
             else _watched.RemoveAt(i);
         }
+        _publishedHistory ??= (ChronicleEntry[])ChronicleTail(_historyCount);
 
         return new WorldSnapshot(
             Tick, clock.Year, clock.DayOfYear, clock.HourOfDay,
             new WorldInfo(Config.Seed, Config.WorldWidth, Config.WorldHeight, Config.CellSize, Config.SeaLevel, Config.ChunkSize),
             _publishedHeights ??= (float[])Terrain.Heights.Clone(), _publishedBiomes ??= (byte[])Terrain.Biomes.Clone(),
-            views, BuildingViews(), chronicle, details, versions, _detailRequests, MindExtras(), ResourceViews(), SettlementViews());
+            views, BuildingViews(), chronicle, details, versions, _detailRequests, MindExtras(), ResourceViews(), SettlementViews())
+        {
+            History = _publishedHistory,
+            SettlementDetails = SettlementDetails(),
+            SettlementRequests = _settlementRequests,
+        };
     }
 
     /// <summary>
@@ -196,6 +206,8 @@ public sealed partial class World
         int alive = 0;
         for (int k = 0; k < st.Count; k++) if (st.Alive[k]) alive++;
         var views = new SettlementView[alive];
+        var food = SettlementFood();
+        float territory = TerritoryRadius;
         int i = 0;
         for (int k = 0; k < st.Count; k++)
         {
@@ -206,7 +218,7 @@ public sealed partial class World
             views[i++] = new SettlementView(k, st.Name[k], st.CenterX[k], st.CenterZ[k], st.Members[k],
                 Factions.IsAlive(st.Faction[k]) ? st.Faction[k] : -1, Npcs.IsAlive(st.Leader[k]) ? st.Leader[k] : -1,
                 g.Favour[k], g.Awe[k], g.Envy[k], g.Fear[k], envied, feared,
-                (Contracts.GodStance)(byte)g.StanceOf(k, Config), r >= 0 ? Religions.Name[r] : null);
+                (Contracts.GodStance)(byte)g.StanceOf(k, Config), r >= 0 ? Religions.Name[r] : null, food[k], territory);
         }
         return views;
     }

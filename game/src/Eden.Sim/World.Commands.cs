@@ -71,6 +71,9 @@ public sealed partial class World
                 if (c.NpcIds is { } ids)
                     foreach (int id in ids) if (Npcs.IsAlive(id)) _thinking.Add(id);
                 break;
+            case WatchSettlementCommand c:
+                WatchSettlement(c.Id); // C1: display only (World.SettlementDetail.cs)
+                break;
             case SaveCommand c:
                 Save(c.Path);
                 break;

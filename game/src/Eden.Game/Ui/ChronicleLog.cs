@@ -10,11 +10,12 @@ public enum ChronicleCategory
 
 /// <summary>
 /// The client's copy of the Chronicle: a bounded ring buffer (<see cref="Capacity"/>, default 5,000) fed from every
-/// frame's snapshot. <see cref="IWorldSnapshot.NewChronicle"/> only holds what was appended since the previous
-/// <em>published</em> snapshot, and the sim may publish several snapshots between two frames, so for the real sim the
-/// log also merges <see cref="Eden.Sim.IMindSnapshot.RecentChronicle"/> (the last 32 entries) and drops duplicates by
-/// tick and text. Bursts of more than 32 entries between two frames can still lose the oldest ones. No per-frame
-/// allocation once the scratch lists have grown.
+/// frame's snapshot. C1: each new snapshot is read through <see cref="IWorldSnapshot.ChronicleSince"/> from the last
+/// tick seen − 1 (god commands can add entries at the tick of an already published snapshot), so entries published
+/// in several snapshots between two frames are all kept, and duplicates are dropped by tick and text. The first
+/// snapshot (and the first one after a load, recognised by its "load" entry) brings the sim's whole history, up to its
+/// 2,048 entries, including what a loaded save carried. <see cref="IWorldSnapshot.NewChronicle"/> is still offered
+/// after it, for snapshots that keep no history.
 /// </summary>
 public sealed class ChronicleLog
 {
@@ -26,7 +27,6 @@ public sealed class ChronicleLog
     private int _start, _count;
     private long _lastTick = -1;
     private readonly HashSet<string> _textsAtLastTick = new();
-    private readonly List<ChronicleEntry> _merge = new();
     private IWorldSnapshot? _lastSnapshot;
 
     public ChronicleLog(int capacity = DefaultCapacity) => _ring = new ChronicleEntry?[Math.Max(1, capacity)];
@@ -53,22 +53,28 @@ public sealed class ChronicleLog
             _textsAtLastTick.Clear();
         }
         _lastSnapshot = snapshot;
+        var since = snapshot.ChronicleSince(_lastTick < 0 ? long.MinValue : _lastTick - 1);
+        if (HasNewLoad(since))
+        {
+            // The sim replaced its world (and its history, from the save): start again from what it holds now.
+            Clear();
+            _lastSnapshot = snapshot;
+            since = snapshot.ChronicleSince(long.MinValue);
+        }
+        for (int i = 0; i < since.Count; i++) Offer(since[i]);
         var fresh = snapshot.NewChronicle;
-        var recent = (snapshot as Eden.Sim.IMindSnapshot)?.RecentChronicle;
-        if (recent is null || recent.Count == 0)
+        for (int i = 0; i < fresh.Count; i++) Offer(fresh[i]);
+    }
+
+    private bool HasNewLoad(IReadOnlyList<ChronicleEntry> since)
+    {
+        if (_count == 0) return false;
+        for (int i = 0; i < since.Count; i++)
         {
-            for (int i = 0; i < fresh.Count; i++) Offer(fresh[i]);
-            return;
+            var e = since[i];
+            if (e.Kind == "load" && (e.Tick > _lastTick || (e.Tick == _lastTick && !_textsAtLastTick.Contains(e.Text)))) return true;
         }
-        // Both lists are in tick order: merge them, then the tick/text rule drops what is already in the log.
-        _merge.Clear();
-        int a = 0, b = 0;
-        while (a < recent.Count || b < fresh.Count)
-        {
-            if (b >= fresh.Count || (a < recent.Count && recent[a].Tick <= fresh[b].Tick)) _merge.Add(recent[a++]);
-            else _merge.Add(fresh[b++]);
-        }
-        foreach (var e in _merge) Offer(e);
+        return false;
     }
 
     /// <summary>Adds one entry unless it is older than the newest seen or a duplicate at the same tick.</summary>
