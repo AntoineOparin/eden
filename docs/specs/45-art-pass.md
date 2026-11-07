@@ -76,6 +76,38 @@ tonemap, mild bloom. No SSAO, no SDFGI, no volumetrics (budget).
 **UI polish (light).** Consistent panel theme (one `Theme` resource), icons for the toolbar
 from the Kenney UI/game-icons packs, no layout changes.
 
+## Added 2026-11-06 (user feedback during the pass)
+
+**Procedural assets.** When no pack has what the world needs (bridges over rivers or between
+islets, docks, fences, field furrows, roads, record stelae, shrine altars, banners), make it:
+either a Godot-built low-poly mesh (`SurfaceTool`/`ArrayMesh` or CSG baked to a mesh, flat
+shaded, palette colours, saved as a `.tres`/`.glb` under `game/assets/generated/` with a note on
+how it was made) or a headless Blender script (`blender --background --python`) checked into
+`tools/art/`. Match the pack's facet density and palette so they sit together.
+
+**Placement on uneven ground.** Nothing may intersect the terrain or float. Rules:
+1. Every building and large prop gets a foundation: sample the terrain at the footprint corners
+   and centre, place the mesh at the highest sampled point, and extend a plinth/skirt mesh (stone
+   or packed earth, palette colour) down to the lowest sampled point plus a margin. Terraces on
+   slopes, as in the Nova Roma reference.
+2. Flatten the render heightmap under footprints: `TerrainBuilder` blends the chunk vertices
+   inside a footprint (plus a 1-cell apron) to the foundation height and rebuilds that chunk.
+   Render-side only; the sim's heightmap and pathing are untouched.
+3. Small props (bushes, rocks, crops, stelae) sample the height at their own position and tilt
+   to the local normal up to 15°; trees stay upright and sink 2–5 % of their height so no gap shows.
+4. A gdUnit test places buildings on a synthetic 30° slope and asserts no vertex of the building
+   mesh is below the terrain and the plinth reaches the ground.
+5. Sim-side: the site picker should also prefer flat ground. That is Eden.Sim's job
+   (`90-backlog.md`, M3 owner); the render rules above must work even when it does not.
+
+**UI readability.** The current panels are bare. Build one `Theme` resource for the whole HUD
+and use it everywhere: a readable UI font (CC0/OFL, e.g. from Google Fonts), 14–16 px body,
+clear hierarchy, panel backgrounds with a slight warm tint and rounded corners, 8 px grid
+spacing, button states (hover, pressed, disabled, toggled), icons for the toolbar and time
+controls (Kenney UI / game-icons CC0), a time display with a day-night glyph, tooltips with
+the power's effect. No layout reflow of the M5 panels beyond applying the theme and spacing.
+Light and dark both legible over bright terrain. Screenshot the HUD before/after too.
+
 ## Not in this pass
 
 Possession camera and character controller (M6), religion/overlay visuals (M7), navigation

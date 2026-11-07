@@ -26,6 +26,12 @@ item; remove it from here in the same PR that resolves it. Last updated 2026-11-
 | `user://data/` override for concepts and ids | M8 or later | Roadmap item 5. |
 | Knowledge UI: settlement knowledge panel, Chronicle filters, spread overlay, proficiency bars | post-M5 UI pass, M7 overlay | Roadmap item 6. Not done in M5 (the M5 UI pass covered dialogue, brain settings, budget meter, god-powers toolbar). The inspector already lists knowledge with proficiency numbers. |
 
+## Eden.Sim (from the art pass review)
+
+| Item | Belongs to | Note |
+|---|---|---|
+| Building site picker should prefer flat ground (max slope under the footprint) and flatten the sim heightmap slightly on completion | M3 owner, next Sim pass | Render-side foundations/flattening land in A1 regardless; this makes pathing and placement agree with the picture. |
+
 ## Eden.Game (from M2, `40-game-client.md`)
 
 | Item | Belongs to | Note |
