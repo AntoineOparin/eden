@@ -147,7 +147,8 @@ The save's `KNW2` section keeps the graph order and which concepts are invention
 
 ## Carried-over items
 
-See `90-backlog.md`; the rows naming your milestone are part of your scope.
+See `90-backlog.md`; the rows naming your milestone are part of your scope. Planned evolution of
+this system (forgetting, pace, graph depth, new primitives, modding, UI) is in `51-knowledge-roadmap.md`.
 
 ## Do not touch
 

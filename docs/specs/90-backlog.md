@@ -16,6 +16,17 @@ M3 / M4 merge.
 | ~4 KB per tick of allocation from birth/death/gossip events | M8 | 5,000 NPCs tick in 2.5 ms today; events are the remaining allocator. |
 | `TryGetNpcDetail` is on-request with a 32-NPC watch list | M5 if the Mind needs more | Contract comment documents it. The spotlight picker should request details only for the NPCs it is about to think for. |
 
+## Knowledge (from the M3/M4 merge review, `51-knowledge-roadmap.md`)
+
+| Item | Belongs to | Note |
+|---|---|---|
+| Forgetting: proficiency decay without practice, records as the floor | balance pass after M5 | Roadmap item 1. |
+| Pace: era length targets, then tune discovery/chatter/teach rates with LLM inventions on | balance pass after M5 | Roadmap item 2. Add writing@ / bronze@ sweep columns. |
+| Graph depth: 3 to 5 prerequisite chains for late-era concepts | M8 content pass or with the pace pass | Roadmap item 3. |
+| New effect primitives (`needMod`, `speedMod`, `unlockRecipe`) | when a concept needs one, one PR each | Roadmap item 4. |
+| `user://data/` override for concepts and ids | M8 or later | Roadmap item 5. |
+| Knowledge UI: settlement knowledge panel, Chronicle filters, spread overlay, proficiency bars | M5 UI pass, M7 overlay | Roadmap item 6. |
+
 ## Eden.Game (from M2, `40-game-client.md`)
 
 | Item | Belongs to | Note |
