@@ -126,7 +126,11 @@ public static class UiTheme
 
     // ---- icons ---------------------------------------------------------------------------------
 
-    /// <summary>A toolbar icon by name: pointer, pause, forward, fast-forward, gear (Kenney); bolt, speech, sun, moon (drawn).</summary>
+    /// <summary>
+    /// A toolbar icon by name: pointer, pause, forward, fast-forward, gear (Kenney); bolt, speech, sun, moon (drawn); and
+    /// the M7 UI glyphs (drawn, see <see cref="M7Glyphs"/>): person, paw, sprout, rain, drought, raise, lower, star,
+    /// skull, basket, scroll, house, map.
+    /// </summary>
     public static Texture2D? Icon(string name)
     {
         if (Icons.TryGetValue(name, out var hit)) return hit;
@@ -136,6 +140,7 @@ public static class UiTheme
             "speech" => Glyph(Speech),
             "sun" => Glyph(Sun, new Color(1f, 0.82f, 0.35f)),
             "moon" => Glyph(Moon, new Color(0.82f, 0.86f, 1f)),
+            _ when M7Glyphs.TryGetValue(name, out var g) => Glyph(g),
             _ => Art.GltfLoader.LoadTexture($"res://assets/ui/icons/{name}.png"),
         };
         Icons[name] = tex;
@@ -193,5 +198,92 @@ public static class UiTheme
         float dx = x - 0.48f, dy = y - 0.5f;
         float ex = x - 0.64f, ey = y - 0.40f;
         return dx * dx + dy * dy <= 0.36f * 0.36f && ex * ex + ey * ey > 0.30f * 0.30f;
+    }
+
+    // ---- M7 UI glyphs (the Kenney packs have no matching icons; drawn like the bolt) -----------------
+
+    /// <summary>Coverage functions on the unit square (y down) for the M7 toolbar and panel buttons.</summary>
+    public static readonly Dictionary<string, Func<float, float, bool>> M7Glyphs = new()
+    {
+        ["person"] = (x, y) => Circle(x, y, 0.5f, 0.24f, 0.14f) || RoundRect(x, y, 0.5f, 0.70f, 0.20f, 0.22f, 0.10f),
+        ["paw"] = (x, y) => Ellipse(x, y, 0.5f, 0.66f, 0.20f, 0.16f) || Circle(x, y, 0.24f, 0.42f, 0.08f) || Circle(x, y, 0.40f, 0.27f, 0.08f)
+                            || Circle(x, y, 0.60f, 0.27f, 0.08f) || Circle(x, y, 0.76f, 0.42f, 0.08f),
+        ["sprout"] = (x, y) => (MathF.Abs(x - 0.5f) < 0.045f && y > 0.42f && y < 0.90f) || Ellipse(Rot(x, y, -0.6f).X, Rot(x, y, -0.6f).Y, 0.34f, 0.40f, 0.17f, 0.09f)
+                             || Ellipse(Rot(x, y, 0.6f).X, Rot(x, y, 0.6f).Y, 0.66f, 0.30f, 0.17f, 0.09f) || RoundRect(x, y, 0.5f, 0.90f, 0.26f, 0.04f, 0.03f),
+        ["rain"] = (x, y) => CloudShape(x, y, 0.34f) || Drop(x, y, 0.32f, 0.72f) || Drop(x, y, 0.52f, 0.80f) || Drop(x, y, 0.70f, 0.70f),
+        ["drought"] = (x, y) => Sun(x, y) && y < 0.62f || (MathF.Abs(y - 0.76f) < 0.035f && x > 0.12f && x < 0.88f)
+                              || (MathF.Abs(y - 0.88f) < 0.035f && x > 0.24f && x < 0.76f),
+        ["raise"] = (x, y) => Mound(x, y) || Arrow(x, y, up: true),
+        ["lower"] = (x, y) => Pit(x, y) || Arrow(x, y, up: false),
+        ["star"] = (x, y) => Geometry2D.IsPointInPolygon(new Vector2(x, y), StarPoly),
+        ["skull"] = (x, y) =>
+            (Circle(x, y, 0.5f, 0.42f, 0.30f) || RoundRect(x, y, 0.5f, 0.72f, 0.18f, 0.12f, 0.04f))
+            && !Circle(x, y, 0.38f, 0.44f, 0.08f) && !Circle(x, y, 0.62f, 0.44f, 0.08f)
+            && !(MathF.Abs(x - 0.5f) < 0.03f && y > 0.70f) && !(MathF.Abs(x - 0.42f) < 0.025f && y > 0.72f) && !(MathF.Abs(x - 0.58f) < 0.025f && y > 0.72f),
+        ["basket"] = (x, y) => Geometry2D.IsPointInPolygon(new Vector2(x, y), BasketPoly) && !(y > 0.56f && y < 0.60f)
+                             || (Ring(x, y, 0.5f, 0.52f, 0.26f, 0.05f) && y < 0.50f) || Circle(x, y, 0.40f, 0.40f, 0.07f) || Circle(x, y, 0.58f, 0.38f, 0.07f),
+        ["scroll"] = (x, y) => RoundRect(x, y, 0.5f, 0.5f, 0.28f, 0.34f, 0.05f) && !(MathF.Abs(y - 0.38f) < 0.025f && MathF.Abs(x - 0.5f) < 0.18f)
+                                                                                   && !(MathF.Abs(y - 0.50f) < 0.025f && MathF.Abs(x - 0.5f) < 0.18f)
+                                                                                   && !(MathF.Abs(y - 0.62f) < 0.025f && MathF.Abs(x - 0.46f) < 0.14f),
+        ["house"] = (x, y) => (Geometry2D.IsPointInPolygon(new Vector2(x, y), RoofPoly) || RoundRect(x, y, 0.5f, 0.66f, 0.26f, 0.20f, 0.02f))
+                            && !RoundRect(x, y, 0.5f, 0.76f, 0.07f, 0.11f, 0.01f),
+        ["map"] = (x, y) => Ring(x, y, 0.5f, 0.5f, 0.34f, 0.07f) || Circle(x, y, 0.5f, 0.5f, 0.16f),
+    };
+
+    private static readonly Vector2[] StarPoly = StarPoints();
+    private static readonly Vector2[] BasketPoly = [new(0.14f, 0.50f), new(0.86f, 0.50f), new(0.76f, 0.88f), new(0.24f, 0.88f)];
+    private static readonly Vector2[] RoofPoly = [new(0.5f, 0.12f), new(0.90f, 0.48f), new(0.10f, 0.48f)];
+
+    private static Vector2[] StarPoints()
+    {
+        var p = new Vector2[10];
+        for (int i = 0; i < 10; i++)
+        {
+            float r = i % 2 == 0 ? 0.42f : 0.18f, a = -MathF.PI / 2 + i * MathF.PI / 5;
+            p[i] = new Vector2(0.5f + r * MathF.Cos(a), 0.54f + r * MathF.Sin(a));
+        }
+        return p;
+    }
+
+    private static bool Circle(float x, float y, float cx, float cy, float r) => (x - cx) * (x - cx) + (y - cy) * (y - cy) <= r * r;
+
+    private static bool Ring(float x, float y, float cx, float cy, float r, float w)
+    {
+        float d = MathF.Sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy));
+        return MathF.Abs(d - r) <= w * 0.5f;
+    }
+
+    private static bool Ellipse(float x, float y, float cx, float cy, float rx, float ry)
+        => (x - cx) * (x - cx) / (rx * rx) + (y - cy) * (y - cy) / (ry * ry) <= 1f;
+
+    private static bool RoundRect(float x, float y, float cx, float cy, float hx, float hy, float r)
+    {
+        float dx = MathF.Max(MathF.Abs(x - cx) - (hx - r), 0), dy = MathF.Max(MathF.Abs(y - cy) - (hy - r), 0);
+        return dx * dx + dy * dy <= r * r;
+    }
+
+    private static Vector2 Rot(float x, float y, float a)
+    {
+        float dx = x - 0.5f, dy = y - 0.5f, c = MathF.Cos(a), s = MathF.Sin(a);
+        return new Vector2(0.5f + dx * c - dy * s, 0.5f + dx * s + dy * c);
+    }
+
+    private static bool CloudShape(float x, float y, float cy)
+        => Circle(x, y, 0.36f, cy + 0.04f, 0.15f) || Circle(x, y, 0.56f, cy - 0.04f, 0.19f) || Circle(x, y, 0.74f, cy + 0.06f, 0.12f)
+           || RoundRect(x, y, 0.55f, cy + 0.10f, 0.30f, 0.08f, 0.07f);
+
+    private static bool Drop(float x, float y, float cx, float cy)
+        => Circle(x, y, cx, cy, 0.05f) || (y < cy && y > cy - 0.12f && MathF.Abs(x - cx) < 0.05f * (1f - (cy - y) / 0.12f));
+
+    private static bool Mound(float x, float y) => y > 0.86f - 0.30f * MathF.Max(0f, 1f - MathF.Abs(x - 0.5f) / 0.40f) && y < 0.92f && x > 0.08f && x < 0.92f;
+
+    private static bool Pit(float x, float y) => y > 0.62f && y < 0.92f && x > 0.08f && x < 0.92f && !(y < 0.62f + 0.22f * MathF.Max(0f, 1f - MathF.Abs(x - 0.5f) / 0.32f));
+
+    private static bool Arrow(float x, float y, bool up)
+    {
+        float t = up ? y : 0.62f - y + 0.06f; // arrow occupies y 0.06..0.50
+        bool shaft = MathF.Abs(x - 0.5f) < 0.06f && t > 0.20f && t < 0.50f;
+        bool head = t >= 0.06f && t <= 0.24f && MathF.Abs(x - 0.5f) <= (t - 0.06f) * 1.1f;
+        return shaft || head;
     }
 }

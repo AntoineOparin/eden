@@ -6,7 +6,7 @@ namespace Eden.Game.Dev;
 public sealed class FakeWorldSnapshot(
     long tick, int year, int dayOfYear, float hourOfDay, WorldInfo world,
     float[] heights, byte[] biomes, NpcView[] npcs, IReadOnlyList<ChronicleEntry> newChronicle,
-    ResourceView[]? resources = null, BuildingView[]? buildings = null) : IWorldSnapshot
+    ResourceView[]? resources = null, BuildingView[]? buildings = null, SettlementView[]? settlements = null) : IWorldSnapshot
 {
     private static readonly string[] FirstNames =
     [
@@ -33,7 +33,15 @@ public sealed class FakeWorldSnapshot(
     public ReadOnlyMemory<NpcView> Npcs { get; } = npcs;
     public ReadOnlyMemory<BuildingView> Buildings { get; } = buildings ?? ReadOnlyMemory<BuildingView>.Empty;
     public ReadOnlyMemory<ResourceView> Resources { get; } = resources ?? [];
+    public ReadOnlyMemory<SettlementView> Settlements { get; } = settlements ?? [];
     public IReadOnlyList<ChronicleEntry> NewChronicle { get; } = newChronicle;
+
+    /// <summary>Concepts a fake settlement may know; settlement k knows the first 3 + 2k (people know a random subset).</summary>
+    private static readonly string[] FakeConcepts =
+    [
+        "foraging", "fire", "tracking", "stone-knapping", "shelter", "clothing", "herbal-lore", "fishing",
+        "pottery", "agriculture", "weaving", "carpentry", "archery", "baking",
+    ];
 
     public static string NameOf(int id) => $"{FirstNames[id % FirstNames.Length]} {id}";
 
@@ -58,6 +66,9 @@ public sealed class FakeWorldSnapshot(
             ["fire"] = 0.4f,
             ["foraging"] = 0.2f + IslandGenerator.Hash01(npcId, 3, 3) * 0.6f,
         };
+        int known = Math.Min(FakeConcepts.Length, 3 + 2 * Math.Max(0, span[index].SettlementId));
+        for (int c = 2; c < known; c++)
+            if (IslandGenerator.Hash01(npcId, c, 29) < 0.7f) knowledge[FakeConcepts[c]] = 0.1f + 0.85f * IslandGenerator.Hash01(npcId, c, 31);
         var rel = new List<RelationshipView>();
         int count = Math.Max(1, span.Length);
         for (int k = 1; k <= 3; k++)
@@ -71,6 +82,7 @@ public sealed class FakeWorldSnapshot(
             new(0, "birth", "I woke on the shore of the island.", 7),
             new(Math.Max(0, Tick - 120), "sight", "I saw a strange light over the sea.", 5),
             new(Math.Max(0, Tick - 30), "talk", $"I spoke with {NameOf((npcId + 37) % count)}.", 3),
+            new(Math.Max(0, Tick - 60), "gossip", "They say the sky itself struck the old oak, because the elders forgot the god.", 6, 2),
         };
         memories.Sort((a, b) => b.Importance.CompareTo(a.Importance));
         detail = new NpcDetail(

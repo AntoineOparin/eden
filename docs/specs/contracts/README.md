@@ -32,6 +32,16 @@ Changes:
   stable visual byte. Eden.Sim fills it in `World.Snapshot()` only (read-only, no RNG, no state hash change); crop ids
   are `World.CropViewIdBase` + building id. `FakeSimHost` emits static nodes. Display only, not saved.
 
+- 2026-11-06 (M7 UI pass, pre-approved): `SettlementView(Id, Name, X, Z, Members, FactionId, LeaderId, Favour, Awe,
+  Envy, Fear, EnviedId, FearedId, Stance, ReligionName?)`, a `GodStance` byte enum (Neutral / Favourable / Fearful /
+  Hostile, same byte values as `Eden.Sim.GodStance`) and `ReadOnlyMemory<SettlementView> Settlements` on
+  `IWorldSnapshot.cs`, for the settlement panel and the religion / god-standing overlay. Ids are -1 when absent; the
+  envied/feared ids are -1 when the feeling is faint (≤ 0.05), as in the Mind's `GodStandingView`. `MemoryView` gains
+  `int Generation = 0` (0 first-hand, n = heard through n retellings) for the inspector's myth marker; the default keeps
+  existing constructors compiling. Eden.Sim fills both in `World.Snapshot()` / `TryBuildDetail` only (read-only, no
+  RNG, no state hash or save change); `FakeSimHost` emits six fake settlements. Note: code that imports both
+  `Eden.Sim` and `Eden.Sim.Contracts` outside the `Eden.Sim` namespace must qualify `GodStance` (two enums share it).
+
 Invariants enforced by tests:
 
 - `BiomeId` (C#) is the meaning of every byte in `IWorldSnapshot.Biomes`; the grid layout

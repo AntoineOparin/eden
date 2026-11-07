@@ -8,7 +8,9 @@ namespace Eden.Game.Dev;
 /// Development stand-in for the real <c>Eden.Sim.SimHost</c> so the render shell (M2) does not depend on M1.
 /// Generates an island heightmap, spawns N synthetic NPCs that wander between random land targets and
 /// publishes immutable snapshots from its own background thread, like the real host. Honours
-/// <see cref="SetTimeScaleCommand"/>; every other command is ignored.
+/// <see cref="SetTimeScaleCommand"/>. M7 UI: six fake settlements (centre = where their first member started) with a
+/// god standing that bless / curse / lightning / gifts nudge, a Chronicle entry per god command, and a few made-up
+/// Chronicle entries of every kind each in-game day so the timeline has something to show. Other commands are ignored.
 /// </summary>
 public sealed class FakeSimHost : ISimHost, IIntentionSink
 {
@@ -30,6 +32,14 @@ public sealed class FakeSimHost : ISimHost, IIntentionSink
     private volatile bool _running;
     private Thread? _thread;
     private List<ChronicleEntry> _pendingChronicle = new();
+
+    // M7 UI: fake settlements and their god standing (sim thread only, after construction).
+    public const int SettlementCount = 6;
+    private static readonly string[] SettlementNames = ["Stoneby", "Elmdale", "Fenholm", "Marstead", "Ashford", "Brightwater"];
+    private static readonly string?[] SettlementFaiths = ["the Way of Palom", "the Way of Palom", "the Old Sky", "the Old Sky", "the Way of Palom", null];
+    private static readonly string[] FakeKinds = ["birth", "death", "trade", "raid", "discovery", "religion", "schism", "shrine", "prayer", "knowledge-lost"];
+    private readonly float[] _setX = new float[SettlementCount], _setZ = new float[SettlementCount];
+    private readonly float[] _favour = new float[SettlementCount], _awe = new float[SettlementCount];
 
     private struct NpcState
     {
@@ -69,6 +79,13 @@ public sealed class FakeSimHost : ISimHost, IIntentionSink
                 Stage = (Next() % 10) switch { 0 => LifeStage.Child, 1 => LifeStage.Elder, _ => LifeStage.Adult },
                 Settlement = (int)(Next() % 6),
             };
+        }
+        for (int k = 0; k < SettlementCount; k++)
+        {
+            int first = Array.FindIndex(_npcs, n => n.Settlement == k);
+            (_setX[k], _setZ[k]) = first >= 0 ? (_npcs[first].X, _npcs[first].Z) : (width * cellSize * 0.5f, height * cellSize * 0.5f);
+            _favour[k] = (k % 3 - 1) * 0.2f; // one favourable, one neutral, one hostile per three
+            _awe[k] = k % 2 == 0 ? 0.2f : 0.45f;
         }
         _pendingChronicle.Add(new ChronicleEntry(0, "genesis", $"A fake island rose from the sea with {npcCount} souls (seed {seed}).", 10, Array.Empty<int>()));
         _latest = Publish();
@@ -145,12 +162,102 @@ public sealed class FakeSimHost : ISimHost, IIntentionSink
     private void DrainCommands()
     {
         while (_commands.TryDequeue(out var cmd))
-            if (cmd is SetTimeScaleCommand ts) _timeScale = (int)ts.Scale;
+        {
+            switch (cmd)
+            {
+                case SetTimeScaleCommand ts: _timeScale = (int)ts.Scale; break;
+                case BlessCommand b when b.TargetId >= 0 && b.TargetId < _npcs.Length:
+                    Nudge(_npcs[b.TargetId].Settlement, b.Curse ? -0.2f : 0.15f, b.Curse ? 0.12f : 0.05f);
+                    God(b.Curse ? "curse" : "blessing", $"The god {(b.Curse ? "cursed" : "blessed")} {FakeWorldSnapshot.NameOf(b.TargetId)}.", [b.TargetId]);
+                    break;
+                case LightningCommand l:
+                    Nudge(NearestSettlement(l.X, l.Z), -0.08f, 0.2f);
+                    God("god", "Lightning struck from a clear sky.", []);
+                    break;
+                case DropItemCommand d:
+                    Nudge(NearestSettlement(d.X, d.Z), 0.08f, 0.03f);
+                    God("god", $"Gifts of {d.ItemId} fell from the sky.", []);
+                    break;
+                case SpawnCommand sp: God("god", $"The god made {sp.Kind} appear out of nothing.", []); break;
+                case TerraformCommand t: God("god", t.DeltaHeight > 0 ? "The god raised the land." : "The god sank the land.", []); break;
+                case WeatherCommand w: God("god", w.Kind == "rain" ? "The god sent rain." : "The god withheld the rain; a drought began.", []); break;
+            }
+        }
+    }
+
+    private void Nudge(int k, float favour, float awe)
+    {
+        if (k < 0 || k >= SettlementCount) return;
+        _favour[k] = Math.Clamp(_favour[k] + favour, -1f, 1f);
+        _awe[k] = Math.Clamp(_awe[k] + awe, 0f, 1f);
+    }
+
+    private void God(string kind, string text, int[] subjects) => _pendingChronicle.Add(new ChronicleEntry(_tick, kind, text, 8, subjects));
+
+    private int NearestSettlement(float x, float z)
+    {
+        int best = -1;
+        float bd = float.MaxValue;
+        for (int k = 0; k < SettlementCount; k++)
+        {
+            float d = (x - _setX[k]) * (x - _setX[k]) + (z - _setZ[k]) * (z - _setZ[k]);
+            if (d < bd) { bd = d; best = k; }
+        }
+        return best;
+    }
+
+    /// <summary>Three made-up Chronicle entries per in-game day, from a hash of the tick (no draw from the NPC stream).</summary>
+    private void FakeChronicle()
+    {
+        const long ticksPerDay = TicksPerHour * HoursPerDay;
+        if (_tick % ticksPerDay != 0) return;
+        long day = _tick / ticksPerDay;
+        for (int i = 0; i < 3; i++)
+        {
+            float r = IslandGenerator.Hash01((int)day, i, 71);
+            string kind = FakeKinds[(int)(r * FakeKinds.Length) % FakeKinds.Length];
+            int k = (int)(IslandGenerator.Hash01((int)day, i, 73) * SettlementCount) % SettlementCount;
+            int who = _npcs.Length == 0 ? -1 : (int)(IslandGenerator.Hash01((int)day, i, 79) * _npcs.Length) % _npcs.Length;
+            int importance = 2 + (int)(IslandGenerator.Hash01((int)day, i, 83) * 8);
+            _pendingChronicle.Add(new ChronicleEntry(_tick, kind, $"[{kind}] something happened in {SettlementNames[k]}.", importance,
+                who >= 0 ? [who] : Array.Empty<int>()));
+        }
+        for (int k = 0; k < SettlementCount; k++)
+        {
+            _favour[k] *= 0.98f;
+            _awe[k] *= 0.97f;
+        }
+    }
+
+    private SettlementView[] SettlementViews()
+    {
+        var members = new int[SettlementCount];
+        int[] leader = [-1, -1, -1, -1, -1, -1];
+        for (int i = 0; i < _npcs.Length; i++)
+        {
+            int k = _npcs[i].Settlement;
+            if (k < 0 || k >= SettlementCount) continue;
+            members[k]++;
+            if (leader[k] < 0 && _npcs[i].Stage == LifeStage.Adult) leader[k] = i;
+        }
+        var views = new SettlementView[SettlementCount];
+        float maxFav = _favour.Max();
+        for (int k = 0; k < SettlementCount; k++)
+        {
+            int favoured = Array.IndexOf(_favour, maxFav);
+            float envy = favoured != k ? Math.Clamp(maxFav - _favour[k], 0f, 1f) * 0.6f : 0f;
+            float fear = Math.Clamp(_awe[favoured] - _awe[k], 0f, 1f) * 0.5f;
+            var stance = _favour[k] > 0.15f ? GodStance.Favourable : _awe[k] >= 0.35f ? GodStance.Fearful : _favour[k] < -0.15f ? GodStance.Hostile : GodStance.Neutral;
+            views[k] = new SettlementView(k, SettlementNames[k], _setX[k], _setZ[k], members[k], k / 2, leader[k],
+                _favour[k], _awe[k], envy, fear, envy > 0.05f ? favoured : -1, fear > 0.05f && favoured != k ? favoured : -1, stance, SettlementFaiths[k]);
+        }
+        return views;
     }
 
     private void Step()
     {
         _tick++;
+        FakeChronicle();
         for (int i = 0; i < _npcs.Length; i++)
         {
             ref var n = ref _npcs[i];
@@ -197,7 +304,8 @@ public sealed class FakeSimHost : ISimHost, IIntentionSink
         _pendingChronicle = new List<ChronicleEntry>();
         long ticksPerDay = TicksPerHour * HoursPerDay, ticksPerYear = ticksPerDay * DaysPerYear;
         return new FakeWorldSnapshot(_tick, (int)(_tick / ticksPerYear), (int)(_tick % ticksPerYear / ticksPerDay),
-            (float)(_tick % ticksPerDay) / TicksPerHour, _info, _heights, _biomes, views, chronicle, _resources);
+            (float)(_tick % ticksPerDay) / TicksPerHour, _info, _heights, _biomes, views, chronicle, _resources,
+            settlements: SettlementViews());
     }
 
     /// <summary>
