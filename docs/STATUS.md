@@ -7,11 +7,12 @@ merge; keep the "Now" block at the top current. Numbers here are measured on Ant
 ## Now (2026-11-06)
 
 - **Merged on main:** M0 tooling + contracts, M1 sim core, M2 render shell, brain Worker (M5-ready),
-  M3 society, M4 knowledge, M5 minds. See git log for the head.
-- **In flight:** K1 knowledge balance on branch `k1-knowledge-balance` (forgetting, pace, graph depth;
-  section below), awaiting merge.
-- **Next per plan:** balance pass (knowledge forgetting + pace, `specs/51-knowledge-roadmap.md`),
-  then M6 possession and M7 myth in parallel, then M8 scale. Worker deploy needs Antoine's go-ahead.
+  M3 society, M4 knowledge, M5 minds, K1 knowledge balance, M7 myth (sim + Mind side), A1 art pass.
+  See git log for the head.
+- **In flight:** nothing. K1, M7 (sim side) and A1 merged on 2026-11-06.
+- **Next per plan:** M7 UI pass (religion overlay, settlement panel, Chronicle filters, remaining god
+  powers) and M6 possession, both on top of the art pass; then M8 scale (asset export, hitches,
+  population ~2,000 by year 120). Worker deploy needs Antoine's go-ahead.
 - **Checks:** `./scripts/check.sh` = contracts (5 schemas, 19 fixtures, concepts.json 95 concepts),
   218 Eden.Sim tests on the K1 branch (the M3 Slow society test now dominates, see K1), 23 Eden.Game gdUnit4 tests,
   headless boot, 85 Worker tests.
@@ -205,3 +206,51 @@ With `--strike` (lightning beside the first village every day for a year from ye
 `ReligionTests` (the seed-20 strike sample loses its first village before a generation passes).
 
 **Not verified here.** The manual M7 check with the Mind on (coordinator, after merge). No UI.
+## 2026-11-06 — A1 art pass (branch a1-art-pass)
+
+**What.** Stylized low-poly look from `docs/art/references/` with CC0 packs, loaded at runtime from `game/assets/`
+(`.gdignore`): Kenney Mini Characters (rigged NPCs), Fantasy Town Kit (buildings assembled per kind), Nature Kit
+(trees per biome, rocks, ore, berry bushes, crops in three stages, decor), ambientCG terrain detail maps, Nunito +
+Kenney icons for the HUD; all recoloured to the reference palette. NPC LODs: 50 skinned hi (AnimationTree:
+idle/walk/sprint blend, work, fight, down; elders stooped), 700 mid (CPU-baked poses in MultiMeshes), rest far
+(impostor atlas quads). Chunked MultiMeshes for resources, decor (within 150 m) and buildings; stone plinths/earth
+banks and render-side terrain flattening under footprints, dirt yards and roads; terrain shader (palette ramp,
+texture luminance detail, cliffs, highland, snow, wet sand, two-band light); water (depth ramp, double foam lines,
+noise normal maps); `SkyCycle` day/night with dawn/dusk and moon; ACES, mild glow, fog; one `UiTheme` with icons,
+day/night glyph and power tooltips. Scale: 1 unit = 1 m, adults 1.75 m, buildings within their footprint radius.
+Contract: `ResourceView` + `IWorldSnapshot.Resources` (pre-approved; `contracts/README.md`), filled in
+`World.Snapshot()` only. New dev flags: `--year --hour --focus --paused --gallery --lineup --hide`.
+
+**How verified.**
+
+- `./scripts/check.sh` green: contracts, 207 Eden.Sim tests (unchanged count, all pass), 36 Eden.Game gdUnit4 tests
+  (was 23; new `ArtPassTests`: building meshes and clean loading, meshes fit footprints, tree per biome, required
+  animations, NPC heights 1.7–1.8 m, AnimationTree states, LOD counts 50/700/1,250 at 2,000 NPCs, far-zoom scale,
+  30° slope placement, render-only flattening, resource views from both hosts, building renderer foundations; the
+  fps test is skipped headless), headless boot clean, Worker checks.
+- Budgets measured on the M4 Pro at 1600×900, vsync off, `--log-fps`, 10 s after a 4 s warm-up. Other agents were
+  running Sim sweeps at the same time (load average 17–22), so these are pessimistic. Draw calls swing with the day:
+  the low number is night (no sun shadows), the high one day.
+
+| Scenario | Budget | Measured |
+|---|---|---|
+| FakeSimHost 2,000 NPCs (`--fake-sim --npcs=2000 --quit-after=14`) | ≥ 60 fps avg | 272 fps avg (min 247) |
+| FakeSimHost 5,000 NPCs | ≥ 30 fps avg | 120 fps avg (145 steady; one 21 fps sample from a start-up hitch) |
+| Real sim seed 20, year 60 (`--seed=20 --year=60 --focus=town`), 299 people, 10 settlements' buildings | ≥ 60 fps | 301 fps avg (min 288) |
+| Real sim seed 20, year 120 (1,683 people), extra heavier case | ≥ 60 fps | 129 fps avg (min 100) |
+| Draw calls at 2,000 NPCs | < 800 | 194–415 (fake); 220–528 real year 60 at the town |
+| Startup to first frame | < 4 s | 0.96 s fake, 0.80 s real (engine clock); 0.99 s wall clock launch-to-quit |
+
+  `--year=60` fast-forward costs 10–12 s of synchronous stepping before the first frame (dev flag, not startup);
+  year 120 took ~9 minutes under the load.
+- Screenshots (seed 20, year 60, 10:00, `--focus=town --paused`):
+  [before 140 m](art/shots/before-140m.jpg), [after 140 m](art/shots/after-140m.jpg),
+  [before 30 m](art/shots/before-30m.jpg), [after 30 m](art/shots/after-30m.jpg),
+  [HUD before](art/shots/hud-before.jpg), [HUD after](art/shots/hud-after.jpg),
+  [scale lineup 30 m](art/shots/scale-lineup-30m.jpg) (`--fake-sim --npcs=0 --lineup --zoom=30 --hour=11 --paused`).
+
+**Numbers.** Assets committed: 11 MB (characters 2.9 MB, buildings 0.45 MB, nature 0.57 MB, textures 6.8 MB,
+UI 0.37 MB). Triangles: character 723, Kenney trees 114–402 (before biome scaling).
+
+**Not done.** Herds (`game`) are not drawn; Nova Roma clouds, bridges and terrain-following roads; Quaternius
+characters (Drive quota). See `90-backlog.md`.

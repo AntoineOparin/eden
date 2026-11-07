@@ -11,6 +11,8 @@ namespace Eden.Game;
 public partial class Hud : CanvasLayer
 {
     private Label? _status;
+    private TextureRect? _dayGlyph;
+    private bool _night;
     private double _sinceStatus = double.MaxValue;
 
     public TimeControls? TimeControls { get; private set; }
@@ -31,6 +33,36 @@ public partial class Hud : CanvasLayer
         BrainSettings = GetNodeOrNull<BrainSettingsPanel>("BrainSettings");
         if (GetNodeOrNull<Button>("MindBar/Row/BrainButton") is { } brain && BrainSettings is { } panel)
             brain.Pressed += () => panel.Visible = !panel.Visible;
+        _dayGlyph = GetNodeOrNull<TextureRect>("TopBar/Row/DayGlyph");
+        ApplyTheme();
+    }
+
+    /// <summary>A1: one theme for every HUD control, toolbar icons and tooltips that say what each power does.</summary>
+    private void ApplyTheme()
+    {
+        var theme = UiTheme.Get();
+        foreach (var child in GetChildren())
+            if (child is Control c) c.Theme = theme;
+        if (_dayGlyph is not null) _dayGlyph.Texture = UiTheme.Icon("sun");
+        if (GetNodeOrNull<Button>("MindBar/Row/BrainButton") is { } brain)
+        {
+            brain.Icon = UiTheme.Icon("gear");
+            brain.TooltipText = "NPC brain settings: provider, model, API key, daily budget";
+        }
+        if (Powers is null) return;
+        foreach (var (name, icon, tip) in new[]
+        {
+            ("Select", "pointer", "Select (Q): click a person to open the inspector and talk to them."),
+            ("Lightning", "bolt", "Lightning (L): click the ground to strike. Burns trees and bushes, kills anyone at the centre, " +
+                                  "wounds and frightens people nearby. They will remember it."),
+            ("Whisper", "speech", "Whisper (V): send one line to the selected person. They hear it as a voice from the sky."),
+        })
+        {
+            if (Powers.GetNodeOrNull<Button>(name) is not { } b) continue;
+            b.Icon = UiTheme.Icon(icon);
+            b.TooltipText = tip;
+            b.CustomMinimumSize = new Vector2(0, 32);
+        }
     }
 
     public void UpdateFrom(IWorldSnapshot snapshot, double delta)
@@ -40,6 +72,13 @@ public partial class Hud : CanvasLayer
         if (_status is null || _sinceStatus < 0.2) return;
         _sinceStatus = 0;
         int hour = (int)snapshot.HourOfDay;
+        bool night = snapshot.HourOfDay < 6f || snapshot.HourOfDay >= 18f;
+        if (_dayGlyph is not null && night != _night)
+        {
+            _night = night;
+            _dayGlyph.Texture = UiTheme.Icon(night ? "moon" : "sun");
+            _dayGlyph.TooltipText = night ? "Night" : "Day";
+        }
         int minute = (int)((snapshot.HourOfDay - hour) * 60);
         _status.Text = $"Year {snapshot.Year + 1}, day {snapshot.DayOfYear + 1}, {hour:00}:{minute:00}    " +
                        $"pop {snapshot.Population}    {Engine.GetFramesPerSecond():0} fps";

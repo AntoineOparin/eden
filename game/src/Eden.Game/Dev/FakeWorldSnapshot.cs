@@ -5,7 +5,8 @@ namespace Eden.Game.Dev;
 /// <summary>Immutable snapshot published by <see cref="FakeSimHost"/>. Inspector details are synthesised on demand.</summary>
 public sealed class FakeWorldSnapshot(
     long tick, int year, int dayOfYear, float hourOfDay, WorldInfo world,
-    float[] heights, byte[] biomes, NpcView[] npcs, IReadOnlyList<ChronicleEntry> newChronicle) : IWorldSnapshot
+    float[] heights, byte[] biomes, NpcView[] npcs, IReadOnlyList<ChronicleEntry> newChronicle,
+    ResourceView[]? resources = null, BuildingView[]? buildings = null) : IWorldSnapshot
 {
     private static readonly string[] FirstNames =
     [
@@ -30,7 +31,8 @@ public sealed class FakeWorldSnapshot(
     public ReadOnlyMemory<byte> Biomes { get; } = biomes;
     public int Population => Npcs.Length;
     public ReadOnlyMemory<NpcView> Npcs { get; } = npcs;
-    public ReadOnlyMemory<BuildingView> Buildings { get; } = ReadOnlyMemory<BuildingView>.Empty;
+    public ReadOnlyMemory<BuildingView> Buildings { get; } = buildings ?? ReadOnlyMemory<BuildingView>.Empty;
+    public ReadOnlyMemory<ResourceView> Resources { get; } = resources ?? [];
     public IReadOnlyList<ChronicleEntry> NewChronicle { get; } = newChronicle;
 
     public static string NameOf(int id) => $"{FirstNames[id % FirstNames.Length]} {id}";

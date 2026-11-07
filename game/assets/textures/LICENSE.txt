@@ -1,0 +1,4 @@
+All textures in this folder come from ambientCG (https://ambientcg.com) and are released under
+Creative Commons CC0 1.0 Universal (public domain dedication):
+https://creativecommons.org/publicdomain/zero/1.0/
+See https://docs.ambientcg.com/license/ for the site's license statement.

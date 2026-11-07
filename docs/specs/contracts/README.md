@@ -25,6 +25,13 @@ Changes:
   Eden.Mind each in-game hour to replace the spotlight set behind `NpcView.IsThinking`. Display only:
   not part of the state hash or the save file.
 
+- 2026-11-06 (A1, pre-approved): `ResourceView(Id, Kind, X, Y, Z, Amount, Variant)` and
+  `ReadOnlyMemory<ResourceView> Resources` on `IWorldSnapshot.cs`, for drawing trees, stone, ore, berries, herds and
+  farm-plot crops. `Kind` is a `game/data/resources.json` id (`tree`, `stone`, `ore`, `berry`, `game`, and `grain` for
+  the crop on a finished farm plot); `Amount` is 0..1 of the node's maximum (crop growth for `grain`); `Variant` is a
+  stable visual byte. Eden.Sim fills it in `World.Snapshot()` only (read-only, no RNG, no state hash change); crop ids
+  are `World.CropViewIdBase` + building id. `FakeSimHost` emits static nodes. Display only, not saved.
+
 Invariants enforced by tests:
 
 - `BiomeId` (C#) is the meaning of every byte in `IWorldSnapshot.Biomes`; the grid layout

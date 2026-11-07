@@ -1,4 +1,4 @@
-[gd_scene load_steps=11 format=3]
+[gd_scene load_steps=14 format=3]
 
 [ext_resource type="Script" path="res://src/Eden.Game/Main.cs" id="1_main"]
 [ext_resource type="PackedScene" path="res://scenes/world/terrain.tscn" id="2_terrain"]
@@ -7,12 +7,17 @@
 [ext_resource type="PackedScene" path="res://scenes/ui/hud.tscn" id="5_hud"]
 [ext_resource type="Script" path="res://src/Eden.Game/Npc/NpcRenderer.cs" id="6_npcs"]
 [ext_resource type="PackedScene" path="res://scenes/npc/npc_hi.tscn" id="7_npc_hi"]
+[ext_resource type="Script" path="res://src/Eden.Game/World/ResourceRenderer.cs" id="8_resources"]
+[ext_resource type="Script" path="res://src/Eden.Game/World/BuildingRenderer.cs" id="9_buildings"]
+[ext_resource type="Script" path="res://src/Eden.Game/World/SkyCycle.cs" id="10_sky"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
-sky_top_color = Color(0.29, 0.5, 0.82, 1)
-sky_horizon_color = Color(0.7, 0.8, 0.9, 1)
-ground_bottom_color = Color(0.08, 0.2, 0.32, 1)
-ground_horizon_color = Color(0.7, 0.8, 0.9, 1)
+sky_top_color = Color(0.3, 0.58, 0.92, 1)
+sky_horizon_color = Color(0.72, 0.85, 0.95, 1)
+sky_curve = 0.12
+ground_bottom_color = Color(0.18, 0.35, 0.55, 1)
+ground_horizon_color = Color(0.72, 0.85, 0.95, 1)
+sun_angle_max = 20.0
 
 [sub_resource type="Sky" id="Sky_main"]
 sky_material = SubResource("ProceduralSkyMaterial_sky")
@@ -21,12 +26,24 @@ sky_material = SubResource("ProceduralSkyMaterial_sky")
 background_mode = 2
 sky = SubResource("Sky_main")
 ambient_light_source = 3
-ambient_light_energy = 0.8
-tonemap_mode = 2
+ambient_light_color = Color(0.92, 0.9, 0.86, 1)
+ambient_light_sky_contribution = 0.45
+ambient_light_energy = 1.0
+tonemap_mode = 3
+tonemap_exposure = 0.95
+tonemap_white = 6.0
+glow_enabled = true
+glow_intensity = 0.35
+glow_strength = 0.8
+glow_bloom = 0.04
+glow_hdr_threshold = 1.2
 fog_enabled = true
-fog_light_color = Color(0.7, 0.8, 0.9, 1)
-fog_density = 0.0004
+fog_light_color = Color(0.72, 0.85, 0.95, 1)
+fog_density = 0.00022
 fog_sky_affect = 0.0
+adjustment_enabled = true
+adjustment_saturation = 1.2
+adjustment_contrast = 1.06
 
 [node name="Main" type="Node"]
 script = ExtResource("1_main")
@@ -36,13 +53,31 @@ environment = SubResource("Environment_main")
 
 [node name="Sun" type="DirectionalLight3D" parent="."]
 transform = Transform3D(0.819152, 0.451984, -0.353129, 0, 0.615661, 0.788011, 0.573576, -0.645501, 0.50432, 0, 120, 0)
-light_energy = 1.1
+light_energy = 1.35
 shadow_enabled = true
-directional_shadow_max_distance = 700.0
+shadow_opacity = 0.75
+shadow_blur = 1.5
+directional_shadow_mode = 1
+directional_shadow_max_distance = 420.0
+
+[node name="Moon" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.819152, -0.40558, 0.40558, 0, 0.707107, 0.707107, -0.573576, -0.579228, 0.579228, 0, 120, 0)
+light_color = Color(0.62, 0.72, 1, 1)
+light_energy = 0.0
+shadow_enabled = false
+
+[node name="SkyCycle" type="Node" parent="."]
+script = ExtResource("10_sky")
 
 [node name="Terrain" parent="." instance=ExtResource("2_terrain")]
 
 [node name="Water" parent="." instance=ExtResource("3_water")]
+
+[node name="Resources" type="Node3D" parent="."]
+script = ExtResource("8_resources")
+
+[node name="Buildings" type="Node3D" parent="."]
+script = ExtResource("9_buildings")
 
 [node name="Npcs" type="Node3D" parent="."]
 script = ExtResource("6_npcs")

@@ -119,6 +119,28 @@ the mid and far NPC LODs only: 1.0× below 60 m camera height rising smoothly to
 kind and a tree of each biome) and a screenshot of it at 30 m under `docs/art/shots/`; a gdUnit
 test asserts the NPC mesh AABB height is 1.7–1.8 m and each building mesh fits its footprint.
 
+## As built (A1, 2026-11-06)
+
+Where the build differs from the text above (decisions in `DECISIONS.md`, numbers in `STATUS.md`):
+
+- **Packs.** All Kenney (Mini Characters, Fantasy Town Kit, Nature Kit) plus ambientCG colour maps, Nunito and
+  Kenney game-icons; Quaternius' character pack was unreachable (Google Drive quota) and its other packs too heavy.
+  Colours are remapped to the reference palette at load. No HDRI: `ProceduralSkyMaterial` only.
+- **Loading.** `game/assets/` is `.gdignore`d and read at runtime (`Art/GltfLoader.cs`), then baked into one-surface
+  vertex-coloured meshes (`Art/MeshBaker.cs`). Buildings are assembled from kit pieces in `Art/BuildingFactory.cs`.
+- **Characters.** Hi LOD 50 (skinned, `AnimationTree`), mid LOD 700 (CPU-skinned baked poses: idle, two walk frames,
+  work, fight, lying; one model per sex), far LOD impostor quads from an atlas rendered at startup. Colours: a palette
+  remap of the Kenney colormap per NPC (settlement colour on the main garment, one of four skin tones). Sleeping uses
+  the `die` pose held, like the dead (who are greyed). No separate sleep animation in the pack.
+- **Resources.** `ResourceView` adds `grain` views for crops on finished farm plots (growth as amount). Herds
+  (`game`) are emitted but not drawn.
+- **Terrain.** Not full triplanar per layer: flat layers use top projection, rock uses triplanar; textures modulate
+  luminance only. Mountains are dry stony grass on the flats and cream rock on cliffs. Dirt yards and straight roads
+  come from a per-vertex weight. Terrain casts no shadows.
+- **Water.** Normals from two `NoiseTexture2D` normal maps (no texture asset); foam is depth-based.
+- **Lighting.** The day-night cycle settles on a fixed afternoon above 12 in-game hours per real second.
+- **Dev flags.** `--year=N`, `--hour=H`, `--focus=X,Z|town`, `--paused`, `--gallery`, `--lineup`, `--hide=Node,...`.
+
 ## Not in this pass
 
 Possession camera and character controller (M6), religion/overlay visuals (M7), navigation

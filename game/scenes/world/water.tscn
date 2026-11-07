@@ -1,4 +1,4 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="Script" path="res://src/Eden.Game/World/WaterPlane.cs" id="1_water"]
 [ext_resource type="Shader" path="res://shaders/water.gdshader" id="2_shader"]
@@ -6,9 +6,38 @@
 [sub_resource type="PlaneMesh" id="PlaneMesh_sea"]
 size = Vector2(3072, 3072)
 
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_a"]
+noise_type = 1
+frequency = 0.02
+fractal_octaves = 3
+
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_a"]
+width = 256
+height = 256
+seamless = true
+as_normal_map = true
+bump_strength = 6.0
+noise = SubResource("FastNoiseLite_a")
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_b"]
+noise_type = 1
+seed = 7
+frequency = 0.035
+fractal_octaves = 2
+
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_b"]
+width = 256
+height = 256
+seamless = true
+as_normal_map = true
+bump_strength = 4.0
+noise = SubResource("FastNoiseLite_b")
+
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_water"]
 render_priority = 0
 shader = ExtResource("2_shader")
+shader_parameter/normal_a = SubResource("NoiseTexture2D_a")
+shader_parameter/normal_b = SubResource("NoiseTexture2D_b")
 
 [node name="Water" type="MeshInstance3D"]
 cast_shadow = 0
