@@ -23,6 +23,7 @@ public partial class SkyCycle : Node
     private Godot.Environment? _env;
     private ProceduralSkyMaterial? _sky;
     private float _lastHour = -1, _rate;
+    private bool _nightSeen;
 
     private static readonly Color DaySkyTop = new(0.30f, 0.58f, 0.92f), DayHorizon = new(0.72f, 0.85f, 0.95f);
     private static readonly Color DuskSkyTop = new(0.32f, 0.36f, 0.62f), DuskHorizon = new(0.98f, 0.66f, 0.42f);
@@ -63,6 +64,7 @@ public partial class SkyCycle : Node
         float elevation = MathF.Sin(dayPhase * MathF.PI) * 58f;
         float azimuth = Mathf.Lerp(-70f, 70f, Math.Clamp(dayPhase, 0f, 1f));
         float day = Mathf.SmoothStep(-6f, 12f, elevation);
+        if (!_nightSeen && day < 0.05f) { _nightSeen = true; Dev.FrameTimeProbe.Note("first night", 0); }
         Daylight = day;
         float low = 1f - Mathf.SmoothStep(8f, 30f, elevation);
 
@@ -81,6 +83,7 @@ public partial class SkyCycle : Node
             _moon.LightEnergy = MoonEnergy * (1f - day);
             _moon.Visible = day < 0.99f;
         }
+        WarmUp();
         if (_sky is not null)
         {
             var top = NightSkyTop.Lerp(DaySkyTop, day).Lerp(DuskSkyTop, low * day * 0.6f);
@@ -95,6 +98,30 @@ public partial class SkyCycle : Node
             _env.AmbientLightEnergy = Mathf.Lerp(0.55f, 1.0f, day);
             _env.FogLightColor = NightHorizon.Lerp(DayHorizon, day).Lerp(DuskHorizon, low * day * 0.5f);
         }
+    }
+
+    /// <summary>
+    /// A2: frames at start-up that show every light set-up once (sun with shadows and moon, moon alone, sun alone), so
+    /// the GPU pipelines for night and dusk are compiled during the first frames instead of the first time night falls
+    /// (the "first night" hitch). Energy is unchanged, only visibility flips; the sun-off frame is one dim frame at boot.
+    /// </summary>
+    [Export] public int WarmupFrames { get; set; } = 3;
+
+    private int _warmed;
+
+    /// <summary>Light set-ups shown so far by the warm-up (tests).</summary>
+    public int WarmedFrames => _warmed;
+
+    private void WarmUp()
+    {
+        if (_warmed >= WarmupFrames || _sun is null || _moon is null) return;
+        switch (_warmed % 3)
+        {
+            case 0: _sun.Visible = true; _sun.ShadowEnabled = true; _moon.Visible = true; break;
+            case 1: _sun.Visible = false; _moon.Visible = true; break;
+            default: _sun.Visible = true; _sun.ShadowEnabled = true; _moon.Visible = false; break;
+        }
+        _warmed++;
     }
 
     private static float LerpHour(float from, float to, float t)

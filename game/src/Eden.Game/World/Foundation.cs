@@ -66,4 +66,12 @@ public readonly record struct Foundation(int BuildingId, Vector3 Centre, float R
         var local = new Basis(Vector3.Up, -Rotation) * new Vector3(x - Centre.X, 0, z - Centre.Z);
         return MathF.Abs(local.X) <= HalfExtents.X + apron && MathF.Abs(local.Z) <= HalfExtents.Y + apron;
     }
+
+    /// <summary>A2: distance (metres) from the world point (x, z) to the footprint rectangle; 0 inside it.</summary>
+    public float DistanceOutside(float x, float z)
+    {
+        var local = new Basis(Vector3.Up, -Rotation) * new Vector3(x - Centre.X, 0, z - Centre.Z);
+        float dx = MathF.Max(0f, MathF.Abs(local.X) - HalfExtents.X), dz = MathF.Max(0f, MathF.Abs(local.Z) - HalfExtents.Y);
+        return MathF.Sqrt(dx * dx + dz * dz);
+    }
 }

@@ -2,7 +2,8 @@
 
 Items that an earlier milestone left out on purpose, decided differently from the plan, or
 flagged as a question. Each line says where it belongs. Whoever executes that milestone owns the
-item; remove it from here in the same PR that resolves it. Last updated 2026-11-07 by the C1 contract pass (after the M7 UI and M6 merges).
+item; remove it from here in the same PR that resolves it. Last updated 2026-11-07 by the C1 and A2
+merges (after the M7 UI and M6 merges).
 
 ## Eden.Sim (from M1, `10-sim-core.md`)
 
@@ -38,11 +39,12 @@ item; remove it from here in the same PR that resolves it. Last updated 2026-11-
 | `FakeSimHost` ignores possession commands | keep unless needed | The director falls back to god view after 3 s ("The world did not let you in"); possession needs the real sim. |
 | More possessed verbs (trade, court, eat on demand) | when wanted | M6 kept the contract's talk/give/work; the body eats and drinks on its own when desperate. |
 | `game/assets/` is `.gdignore`d and loaded at runtime | M8 (export) | A1 loads GLB/PNG/JPG/TTF with `GltfDocument`/`Image`/`FontFile` from `res://` files (DECISIONS 2026-11-06). An exported build must ship them as non-resource files (export filter `assets/*`) or move them to imported resources. |
-| Game herds (`ResourceView` kind `game`) are not drawn | next art pass or M8 | No CC0 animal model was chosen in A1; the views are emitted and skipped by `ResourceRenderer`. |
-| Nova Roma extras not done: cartoon cumulus clouds, roads that follow the terrain, bridges, record stelae and shrine altars as own meshes | next art pass | A1 paints dirt yards and straight roads to the settlement centre and builds plinths/boats procedurally; the rest is open. |
-| One-off hitches: decor rebuild when a building completes (~65k-cell scan), impostor atlas readback at startup, first night shader variant | M8 | Visible as a single low sample in the 5,000-NPC run; averages stay within budget. |
+| The snapshot has no weather field; the client infers rain / drought from the god's casts and the Chronicle | next contract pass | `World/WeatherState.cs` (A2) matches the sim's wording ("sent rain", "drought began", "skies cleared"). Add `IWorldSnapshot.Weather` (kind + ticks left) so clouds also follow weather the god did not cast and a renamed Chronicle line cannot break it. |
+| Lightning has no bolt: only Main's short omni flash, which hardly shows by day (`docs/art/shots/fx-lightning.jpg`) | next UI pass | A2's `--fx-check` reviewed every power; the rest were fixed (curse smoke rises over the roofs, drought dust and the weather tint are stronger). The bolt belongs in `Main.StrikeAt` / `PowerFx`. |
+| Characters are "less chibi" (head ≈ 1:4.2–1:5.3), not 1:6 | when a CC0 rigged human pack with real proportions is reachable | `Art/CharacterProportions.cs` reshapes the Kenney rig; the wide block heads limit how far it can go. |
+| Herd animals only drift on a loop; they do not walk, flee or follow the sim | with herds as agents (M3/M8 row above) | `ResourceRenderer` (A2): 2–5 per herd, idle pose baked once. |
+| First-ever launch on a machine still renders and reads back the impostor atlas once (~1–2 ms readback, then cached) | keep | `user://cache/impostor-atlas-<hash>.png`; fresh clones and the gdUnit project pay it once. |
 | Seed 20 at year 60 has ≈300 people, not the ≈1,000 spec 45 assumed | balance pass / spec 45 | Budgets were also measured at year 120 (see STATUS A1). |
-| Power effects have no screenshot; brush preview and effects were checked by hand and by `MythUiTests` (counts), not visually reviewed | next UI pass | Rain/drought tint, ripple, bless glow, curse smoke are CPU particles and one ring shader (`Fx/PowerFx.cs`). |
 | The display forces V-Sync (100–200 Hz) on this laptop now, so fps budgets read as the cap | M8 | `--log-frame-time` measures script and render CPU cost instead; Metal returns 0 for GPU time. |
 | `FakeSimHost` stays under `src/Eden.Game/Dev/` | keep | Useful for perf runs; `--fake-sim --npcs=N --log-fps --screenshot=PATH --quit-after=S` are the CLI flags; A1 added `--year=N --hour=H --focus=X,Z|town --paused --zoom=M --gallery --lineup --hide=Node,...`; M7 UI added `--ui=... --m7-check --log-frame-time`. |
 

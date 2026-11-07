@@ -141,10 +141,34 @@ Where the build differs from the text above (decisions in `DECISIONS.md`, number
 - **Lighting.** The day-night cycle settles on a fixed afternoon above 12 in-game hours per real second.
 - **Dev flags.** `--year=N`, `--hour=H`, `--focus=X,Z|town`, `--paused`, `--gallery`, `--lineup`, `--hide=Node,...`.
 
+## As built (A2, 2026-11-07)
+
+The second pass (brief `docs/specs/briefs/a2-art-followups.md`; decisions in `DECISIONS.md` "A2:", numbers in `STATUS.md`):
+
+- **Sky and weather.** `World/CloudLayer.cs`: 90 procedural cartoon cumulus (`ProceduralMeshes.Cloud`, five shapes),
+  60–120 m, drifting, mostly round the shores, unshaded `shaders/clouds.gdshader`, faded near the camera, no shadows
+  (`--cloud-shadows` turns them on). `World/WeatherState.cs` reads the weather from the god's casts and the Chronicle
+  (the snapshot has no weather field): rain shows every cloud in slate grey, drought a few warm ones; the rain /
+  drought screen tint uses the same palette. `SkyCycle` warms the night and dusk light set-ups in its first frames.
+- **Animals.** `game/assets/animals/` (Quaternius CC0 deer, pig as boar, sheep, via Poly Pizza), `Art/AnimalLibrary.cs`
+  (idle pose baked by `Art/Skinning.cs`, true size), 2–5 per herd drifting inside the herd in `ResourceRenderer`.
+- **Structures.** `World/RoadNetwork.cs` (MST per settlement, bridge spans over water and notches), `World/RoadRenderer.cs`
+  (draped road strips, plank bridges with piles, record stelae in front of archives), `ProceduralMeshes.Stela`, `Altar`
+  (inside the shrine through a `proc:` part in `MeshBaker`), `BridgeSegment`, `BridgePile`. Footprints blend back into the
+  slope over 2.5 m (`TerrainBuilder.YardBlend`); a rebuilt heightmap re-applies the last foundations.
+- **Characters.** `Art/CharacterProportions.cs` reshapes the Kenney rig (head 0.19–0.24 of the height, was ~0.5); the
+  impostor atlas is cached in `user://cache/` by a hash of its inputs.
+- **Hitches.** Decor and props refresh only the terrain chunks a building touched (`TerrainBuilder.LastDirtyChunks`,
+  `PropBatches.Begin(chunks)`), a frame after the terrain; roads a frame after that.
+- **Dev flags.** `--fx-check=DIR` (`Dev/FxCheck.cs`: every power's effect at the town, `fx-*.jpg`), `--lineup-close`,
+  `--cloud-shadows`; `--log-frame-time` now also logs every frame over 33 ms after the 4 s warm-up and the one-off work in
+  it. Scripted runs keep the window unfocusable and on top.
+
 ## Not in this pass
 
 Possession camera and character controller (M6), religion/overlay visuals (M7), navigation
-baking (M6), knowledge UI (backlog), sound.
+baking (M6), knowledge UI (backlog), sound. After A2: weather as a snapshot field, a visible lightning bolt, characters
+at a true 1:6 (needs a new mesh pack), animals that walk or flee, rivers.
 
 ## Acceptance tests
 

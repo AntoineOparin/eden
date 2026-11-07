@@ -1,0 +1,12 @@
+Deer, Pig and Sheep models by Quaternius (https://quaternius.com)
+
+License: Creative Commons Zero, CC0 1.0 Universal (public domain dedication)
+https://creativecommons.org/publicdomain/zero/1.0/
+
+The author dedicated these works to the public domain: you can copy, modify, distribute and use them,
+even commercially, without asking permission. Credit is appreciated but not required.
+
+Each model page on Poly Pizza states "CC0 1.0":
+  https://poly.pizza/m/T6Cs7tmMHJ (Deer)
+  https://poly.pizza/m/TNvG3QUFlp (Pig)
+  https://poly.pizza/m/C39AUXUUes (Sheep)

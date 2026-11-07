@@ -171,7 +171,7 @@ public static class BuildingFactory
         return l.Parts;
     }
 
-    /// <summary>Shrine: stone platform, four stone pillars, a pointed roof and an obelisk inside.</summary>
+    /// <summary>Shrine: stone platform, four stone pillars, a pointed roof, an altar with offerings and an obelisk behind it.</summary>
     private static List<Part> Shrine()
     {
         var l = new Layout(3.0f, 2.8f, Recolor.TownStone);
@@ -179,7 +179,9 @@ public static class BuildingFactory
         foreach (var (x, z) in new[] { (-0.65f, -0.65f), (0.65f, -0.65f), (-0.65f, 0.65f), (0.65f, 0.65f) })
             l.Add("pillar-stone", x, z, 0, 0.15f, new Vector3(1.2f, 1.2f, 1.2f));
         l.Add("roof-high-point", 0, 0, 0, 1.35f, new Vector3(1.6f, 0.9f, 1.6f));
-        l.Add("statue_obelisk", 0, 0, 0, 0.15f, new Vector3(1.4f, 1.2f, 1.4f), Recolor.Nature, root: Nature);
+        // A2: an altar with offerings under the roof (procedural), the obelisk moved behind it.
+        l.Add("statue_obelisk", 0, -0.42f, 0, 0.15f, new Vector3(1.0f, 1.0f, 1.0f), Recolor.Nature, root: Nature);
+        l.Parts.Add(new Part(MeshBaker.ProceduralPrefix + "altar", new Transform3D(Basis.Identity, new Vector3(0, 0.15f * 2.8f + 0.04f, 0.25f))));
         l.Add("banner-red", 0.3f, 0.68f, 3, 0.2f, new Vector3(0.6f, 0.6f, 0.6f), accent: true);
         return l.Parts;
     }

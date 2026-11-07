@@ -42,6 +42,12 @@ public partial class PowerFx : Node3D
 
     public override void _Process(double delta) => Tick?.Invoke();
 
+    /// <summary>
+    /// A2: raised when a rain or drought effect plays, so the clouds (<see cref="CloudLayer"/>) thicken or thin at once and
+    /// stay that way for the weather's duration; the flash tint and the clouds share <see cref="WeatherState"/>'s colours.
+    /// </summary>
+    public event Action<SkyWeather>? WeatherPlayed;
+
     /// <summary>Effects started so far (tests).</summary>
     public int Started { get; private set; }
 
@@ -69,16 +75,18 @@ public partial class PowerFx : Node3D
         switch (power)
         {
             case GodPower.SpawnHuman or GodPower.SpawnAnimal or GodPower.SpawnPlant:
-                Particles(at, c, amount: 40, life: 1.4f, up: 6f, spread: 1.5f, size: 0.25f);
-                Ripple(at, 5f, c, 0.9f);
+                Particles(at, c, amount: 40, life: 1.4f, up: 6f, spread: 1.5f, size: 0.35f);
+                Ripple(at, 6f, c, 1.1f);
                 break;
             case GodPower.Rain:
                 Particles(at + new Vector3(0, 40, 0), c with { A = 0.7f }, amount: 500, life: 1.6f, up: -30f, spread: 45f, size: 0.12f, stretch: 6f, seconds: 4f);
-                ScreenTint(new Color(0.25f, 0.35f, 0.55f, 0.16f), 4.5);
+                ScreenTint(WeatherState.TintOf(SkyWeather.Rain), 4.5);
+                WeatherPlayed?.Invoke(SkyWeather.Rain);
                 break;
             case GodPower.Drought:
-                Particles(at, c with { A = 0.5f }, amount: 120, life: 3f, up: 2.5f, spread: 40f, size: 0.4f, seconds: 3f);
-                ScreenTint(new Color(0.65f, 0.40f, 0.12f, 0.16f), 4.5);
+                Particles(at, c with { A = 0.6f }, amount: 260, life: 3f, up: 2.5f, spread: 40f, size: 1.0f, seconds: 3f); // A2: dust large enough to read at 55 m
+                ScreenTint(WeatherState.TintOf(SkyWeather.Drought), 4.5);
+                WeatherPlayed?.Invoke(SkyWeather.Drought);
                 break;
             case GodPower.RaiseTerrain or GodPower.LowerTerrain:
                 Ripple(at, radius, c, 1.2f);
@@ -93,7 +101,9 @@ public partial class PowerFx : Node3D
                 break;
             case GodPower.Curse:
                 Light(at + new Vector3(0, 3, 0), new Color(0.55f, 0.30f, 0.70f), 5f, 1.6);
-                Particles(at, c with { A = 0.75f }, amount: 50, life: 3f, up: 1.6f, spread: 2.5f, size: 1.1f);
+                // A2: the smoke rises clear of the roofs and a dark ring marks the spot (it read as nothing at 55 m).
+                Particles(at + new Vector3(0, 1.5f, 0), new Color(0.45f, 0.34f, 0.55f, 0.85f), amount: 70, life: 3f, up: 3.5f, spread: 2.5f, size: 1.8f);
+                Ripple(at, 6f, new Color(0.40f, 0.22f, 0.50f), 1.4f);
                 break;
             case GodPower.DropFood:
                 Particles(at + new Vector3(0, 18, 0), c, amount: 24, life: 1.2f, up: -14f, spread: 2f, size: 0.3f);
