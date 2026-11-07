@@ -22,3 +22,4 @@ project/assembly_name="Eden.Game"
 [rendering]
 
 renderer/rendering_method="forward_plus"
+textures/vram_compression/import_etc2_astc=true

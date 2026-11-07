@@ -51,65 +51,144 @@ public sealed partial class World
     }
 
     // ---- binary body: tagged, versioned, length-prefixed sections (little-endian) -------------
+    // Format version 2 (M8) frames each section as: tag (4 ASCII bytes), section version (int16), flags (byte),
+    // stored length (int32), and when flags has Brotli the raw length (int32) before the compressed bytes. Format
+    // version 1 had no flags byte and no compression. See docs/specs/10-sim-core.md "Save format and versions".
 
+    /// <summary>Version of every section whose layout has not changed since format version 1.</summary>
     private const short SectionVersion = 1;
+
+    [Flags]
+    private enum SectionFlags : byte { None = 0, Brotli = 1 }
+
+    /// <summary>Sections at least this large are Brotli-compressed (quality 1: about 10× smaller text at ~100 MB/s).</summary>
+    private const int CompressAbove = 4096;
 
     internal void WriteBody(BinaryWriter w)
     {
-        Section(w, "CONF", bw => bw.Write(JsonSerializer.Serialize(Config)));
-        Section(w, "CLCK", bw =>
+        Section(w, "CONF", SectionVersion, bw => bw.Write(JsonSerializer.Serialize(Config)));
+        Section(w, "CLCK", SectionVersion, bw =>
         {
             bw.Write(Tick);
             var (a, b, c, d) = Rng.State;
             bw.Write(a); bw.Write(b); bw.Write(c); bw.Write(d);
             bw.Write(TotalBirths); bw.Write(TotalDeaths); bw.Write(MaxLineage);
         });
-        Section(w, "TERR", bw =>
+        Section(w, "TERR", SectionVersion, bw =>
         {
             bw.Write(Terrain.Width); bw.Write(Terrain.Height);
             foreach (var v in Terrain.Heights) bw.Write(v);
             foreach (var v in Terrain.Moisture) bw.Write(v);
         });
-        Section(w, "RSRC", Resources.Write);
-        Section(w, "NPCS", Npcs.Write);
-        Section(w, "MEMS", bw => Memories.Write(bw, Npcs));
-        Section(w, "RELS", Relationships.Write);
-        Section(w, "KNOW", WriteKnowledge);
-        Section(w, "MISC", bw =>
+        Section(w, "RSRC", SectionVersion, Resources.Write);
+        Section(w, "NPCS", SectionVersion, Npcs.Write);
+        Section(w, "MEMS", MemoryStore.SectionVersion, bw => Memories.Write(bw, Npcs));
+        Section(w, "RELS", SectionVersion, Relationships.Write);
+        Section(w, "KNOW", SectionVersion, WriteKnowledge);
+        Section(w, "MISC", SectionVersion, bw =>
         {
             bw.Write(Weather); bw.Write(WeatherUntil);
             bw.Write(Npcs.None); bw.Write(0f); bw.Write(0f); bw.Write(false); // M6: possession is not saved (release on load)
         });
-        Section(w, "SOCI", WriteSociety);
-        Section(w, "KNW2", WriteKnowledgeExtras);
-        Section(w, "MYTH", WriteMyth);
+        Section(w, "SOCI", SectionVersion, WriteSociety);
+        Section(w, "KNW2", SectionVersion, WriteKnowledgeExtras);
+        Section(w, "MYTH", SectionVersion, WriteMyth);
     }
 
-    private static void Section(BinaryWriter w, string tag, Action<BinaryWriter> body)
+    /// <summary>A section at <see cref="SectionVersion"/> (1), for sections whose layout never changed.</summary>
+    private static void Section(BinaryWriter w, string tag, Action<BinaryWriter> body) => Section(w, tag, SectionVersion, body);
+
+    /// <summary>
+    /// Every section of a body (format 2 framing unless told otherwise), decompressed. For readers of sections written
+    /// after <see cref="WriteBody"/> (e.g. a section appended by SaveWriter): find your tag here instead of parsing the
+    /// framing yourself.
+    /// </summary>
+    internal static Dictionary<string, (short version, byte[] body)> SectionsOf(byte[] body, int formatVersion = SaveWriter.FormatVersion)
+    {
+        using var r = new BinaryReader(new MemoryStream(body, writable: false));
+        return ReadSections(r, formatVersion);
+    }
+
+    private static void Section(BinaryWriter w, string tag, short version, Action<BinaryWriter> body)
     {
         using var ms = new MemoryStream();
         using (var bw = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true)) body(bw);
+        var raw = new ReadOnlySpan<byte>(ms.GetBuffer(), 0, (int)ms.Length);
         w.Write(System.Text.Encoding.ASCII.GetBytes(tag));
-        w.Write(SectionVersion);
-        w.Write((int)ms.Length);
-        w.Write(ms.GetBuffer(), 0, (int)ms.Length);
+        w.Write(version);
+        if (raw.Length >= CompressAbove)
+        {
+            var packed = new byte[System.IO.Compression.BrotliEncoder.GetMaxCompressedLength(raw.Length)];
+            if (System.IO.Compression.BrotliEncoder.TryCompress(raw, packed, out int written, quality: 1, window: 22)
+                && written < raw.Length)
+            {
+                w.Write((byte)SectionFlags.Brotli);
+                w.Write(written);
+                w.Write(raw.Length);
+                w.Write(packed, 0, written);
+                return;
+            }
+        }
+        w.Write((byte)SectionFlags.None);
+        w.Write(raw.Length);
+        w.Write(raw);
     }
 
-    internal void ReadBody(BinaryReader r)
+    /// <summary>
+    /// Split a body into sections. Every length is checked against what is left, so a cut-off file fails here with a
+    /// clear message instead of half-way through a section. Unknown tags are kept but ignored (forward-compatible
+    /// additions); a section version newer than this build is rejected by its reader.
+    /// </summary>
+    private static Dictionary<string, (short version, byte[] body)> ReadSections(BinaryReader r, int formatVersion)
     {
-        BeginKnowledgeLoad();
-        var sections = new Dictionary<string, byte[]>(StringComparer.Ordinal);
-        while (r.BaseStream.Position < r.BaseStream.Length)
+        var sections = new Dictionary<string, (short, byte[])>(StringComparer.Ordinal);
+        var s = r.BaseStream;
+        while (s.Position < s.Length)
         {
+            int headerSize = formatVersion >= 2 ? 11 : 10;
+            if (s.Length - s.Position < headerSize) throw new InvalidDataException("save is truncated (section header)");
             string tag = System.Text.Encoding.ASCII.GetString(r.ReadBytes(4));
             short version = r.ReadInt16();
+            var flags = formatVersion >= 2 ? (SectionFlags)r.ReadByte() : SectionFlags.None;
+            if ((flags & ~SectionFlags.Brotli) != 0) throw new InvalidDataException($"section {tag} has unknown flags {(byte)flags}");
             int len = r.ReadInt32();
-            if (version > SectionVersion) throw new InvalidDataException($"section {tag} version {version} is newer than this build");
-            sections[tag] = r.ReadBytes(len);
+            int rawLen = 0;
+            if ((flags & SectionFlags.Brotli) != 0)
+            {
+                if (s.Length - s.Position < 4) throw new InvalidDataException($"save is truncated (section {tag})");
+                rawLen = r.ReadInt32();
+            }
+            if (len < 0 || len > s.Length - s.Position) throw new InvalidDataException($"save is truncated (section {tag})");
+            byte[] body = r.ReadBytes(len);
+            if ((flags & SectionFlags.Brotli) != 0)
+            {
+                if (rawLen < 0 || rawLen > 1 << 30) throw new InvalidDataException($"section {tag} has a bad length");
+                var raw = new byte[rawLen];
+                if (!System.IO.Compression.BrotliDecoder.TryDecompress(body, raw, out int got) || got != rawLen)
+                    throw new InvalidDataException($"section {tag} is damaged (decompression failed)");
+                body = raw;
+            }
+            sections[tag] = (version, body);
         }
-        BinaryReader Open(string tag) => sections.TryGetValue(tag, out var b)
-            ? new BinaryReader(new MemoryStream(b))
-            : throw new InvalidDataException($"save is missing section {tag}");
+        return sections;
+    }
+
+    internal void ReadBody(BinaryReader r, int formatVersion = SaveWriter.FormatVersion)
+    {
+        var sections = ReadSections(r, formatVersion);
+        BeginKnowledgeLoad();
+        BinaryReader Open(string tag, short maxVersion = SectionVersion)
+        {
+            if (!sections.TryGetValue(tag, out var sec)) throw new InvalidDataException($"save is missing section {tag}");
+            if (sec.version > maxVersion) throw new InvalidDataException($"section {tag} version {sec.version} is newer than this build");
+            return new BinaryReader(new MemoryStream(sec.body));
+        }
+        byte[]? Optional(string tag)
+        {
+            if (!sections.TryGetValue(tag, out var sec)) return null;
+            if (sec.version > SectionVersion) throw new InvalidDataException($"section {tag} version {sec.version} is newer than this build");
+            return sec.body;
+        }
 
         using (var br = Open("CONF"))
             Config = JsonSerializer.Deserialize<SimConfig>(br.ReadString()) ?? throw new InvalidDataException("bad config");
@@ -121,7 +200,9 @@ public sealed partial class World
         }
         using (var br = Open("TERR"))
         {
-            var t = new Terrain(br.ReadInt32(), br.ReadInt32(), Config.CellSize, Config.SeaLevel);
+            int tw = br.ReadInt32(), th = br.ReadInt32();
+            if (tw <= 0 || th <= 0 || (long)tw * th * 8 > br.BaseStream.Length) throw new InvalidDataException("TERR: bad size");
+            var t = new Terrain(tw, th, Config.CellSize, Config.SeaLevel);
             for (int i = 0; i < t.Heights.Length; i++) t.Heights[i] = br.ReadSingle();
             for (int i = 0; i < t.Moisture.Length; i++) t.Moisture[i] = br.ReadSingle();
             t.RecomputeDerived();
@@ -132,7 +213,7 @@ public sealed partial class World
         Npcs = new Npcs(64);
         using (var br = Open("NPCS")) Npcs.Read(br);
         Memories = new MemoryStore(Config.MemoryCap, Config.TicksPerDay);
-        using (var br = Open("MEMS")) Memories.Read(br, Npcs);
+        using (var br = Open("MEMS", MemoryStore.SectionVersion)) Memories.Read(br, Npcs, sections["MEMS"].version);
         using (var br = Open("RELS")) Relationships.Read(br);
         using (var br = Open("KNOW")) ReadKnowledge(br);
         using (var br = Open("MISC"))
@@ -142,13 +223,14 @@ public sealed partial class World
             _possessed = Npcs.None;
             ClearPossessionRuntime();
         }
-        if (sections.TryGetValue("SOCI", out var society)) { using var br = new BinaryReader(new MemoryStream(society)); ReadSociety(br); }
+        if (Optional("SOCI") is { } society) { using var br = new BinaryReader(new MemoryStream(society)); ReadSociety(br); }
         else ReadSociety(null);
-        EndKnowledgeLoad(sections.TryGetValue("KNW2", out var knw2) ? knw2 : null);
-        ReadMyth(sections.TryGetValue("MYTH", out var myth) ? myth : null);
+        EndKnowledgeLoad(Optional("KNW2"));
+        ReadMyth(Optional("MYTH"));
 
         _grid = new SpatialGrid(Terrain.MaxX + Terrain.CellSize, Terrain.MaxZ + Terrain.CellSize, 32f);
         _grid.Rebuild(Npcs);
+        _kidsTick = -1; // M8: the kin index belongs to the world before the load
         _pendingBirths.Clear();
         _watched.Clear();
         _publishedHeights = null;
@@ -209,6 +291,7 @@ public sealed partial class World
             _concepts[id] = new ConceptProposal(id, name, desc, prereqs, difficulty, effects);
         }
         _knowledge = new Dictionary<string, float>?[Math.Max(64, Npcs.Capacity)];
+        ResetProfRows();
         for (int s = 0; s < Npcs.HighWater; s++)
         {
             if (!Npcs.Alive[s]) continue;

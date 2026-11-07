@@ -4,7 +4,7 @@ namespace Eden.Sim;
 
 /// <summary>
 /// C1: the Chronicle history (up to <see cref="ChronicleHistorySize"/> entries) saved as its own tagged section
-/// <c>CHRN</c>, written after the body sections (same tag / version / length framing as World.Persistence.cs) and
+/// <c>CHRN</c>, written after the body sections (same framing as World.Persistence.cs, found with SectionsOf) and
 /// read back after <see cref="ReadBody"/>, which keeps unknown tags and ignores them. Self-contained so the save
 /// format work in SaveWriter / SaveReader only carries one registration line each. Not part of the state hash: the
 /// Chronicle never influences a tick. "load" notices are session-only and are not written, so saving a freshly
@@ -37,20 +37,11 @@ public sealed partial class World
     /// "load" notice <see cref="ReadBody"/> just added at the end. Entries restored here are history, not news: they
     /// are not re-published in <see cref="IWorldSnapshot.NewChronicle"/> (readers use ChronicleSince).
     /// </summary>
-    internal void ReadChronicleSection(Stream body)
+    internal void ReadChronicleSection(byte[] body, int formatVersion = SaveWriter.FormatVersion)
     {
-        body.Position = 0;
-        using var r = new BinaryReader(body, System.Text.Encoding.UTF8, leaveOpen: true);
-        byte[]? section = null;
-        while (body.Position + 10 <= body.Length)
-        {
-            string tag = System.Text.Encoding.ASCII.GetString(r.ReadBytes(4));
-            r.ReadInt16();
-            int len = r.ReadInt32();
-            if (tag == ChronicleSectionTag) { section = r.ReadBytes(len); break; }
-            body.Position += len;
-        }
-        if (section is null) return;
+        // M8 framing: sections are found through World.SectionsOf (handles the v2 flags byte and Brotli).
+        if (!SectionsOf(body, formatVersion).TryGetValue(ChronicleSectionTag, out var found)) return;
+        byte[] section = found.body;
 
         using var br = new BinaryReader(new MemoryStream(section), System.Text.Encoding.UTF8);
         int n = br.ReadInt32();

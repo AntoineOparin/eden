@@ -316,6 +316,21 @@ public sealed record SimConfig
     /// <summary>"Work alongside" keeps the possessed NPC on the joined job for this many ticks (or until it moves).</summary>
     public int PossessedWorkTicks { get; init; } = 24;
 
+    // ---- M8 building sites ---------------------------------------------------------------------
+
+    /// <summary>How far a finished building pulls the ground under it toward the footprint's mean height (0 = off).</summary>
+    public float FoundationFlatten { get; init; } = 0.5f;
+
+    // ---- M8 data override ---------------------------------------------------------------------
+
+    /// <summary>
+    /// Optional folder whose <c>concepts.json</c>, <c>resources.json</c>, <c>buildings.json</c> and <c>tools.json</c>
+    /// replace the shipped ones (knowledge roadmap item 5); files missing from it fall back to the shipped copy. The
+    /// set is validated like the shipped data and a bad one throws <see cref="InvalidDataException"/> naming the folder.
+    /// Eden.Game passes <c>user://data</c> when that folder exists.
+    /// </summary>
+    public string? DataOverrideDir { get; init; }
+
     public int TicksPerDay => TicksPerHour * HoursPerDay;
     public int TicksPerYear => TicksPerDay * DaysPerYear;
 }

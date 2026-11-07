@@ -59,12 +59,16 @@ inputs and outputs). Each follows the rule in `50-knowledge-data.md`: `concepts.
 `ConceptEffectKind`, `EffectApplier`, the Worker prompt and `schemas.ts` in one PR, plus
 fixtures. Do not add a primitive speculatively; add it with the concept that needs it.
 
-## 5. Data override and modding (M8 or later)
+## 5. Data override and modding (M8 or later) — landed in M8 (2026-11-07)
 
 `game/data/*.json` is embedded in `Eden.Sim`. Add an optional override directory
 (`user://data/`) read at world creation when present, validated with the same loader and
 schema, with a clear error on failure. Saves record which concept set they were created with.
 No hot reload inside a running world.
+
+As built: `SimConfig.DataOverrideDir` + `KnowledgeData.FromDirectory` (missing files fall back to the shipped
+copy; the C# parser and graph checks are the validation, not the JSON schema), `SaveHeader.ConceptSet` =
+`KnowledgeData.SetHash`; Eden.Game passes `user://data` from `Dev/DataOverride.cs`. See 10-sim-core.md.
 
 ## 6. Knowledge UI (M5 dialogue/UI pass and M7) — landed in the M7 UI pass and C1 (2026-11-07)
 

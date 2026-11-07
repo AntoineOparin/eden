@@ -41,7 +41,7 @@ public class SaveRoundTripTests
         SaveWriter.Write(w, ms);
         ms.Position = 0;
         var header = SaveReader.ReadHeader(ms);
-        Assert.Equal(new SaveHeader(SaveWriter.FormatVersion, 2, 500, w.Population), header);
+        Assert.Equal(new SaveHeader(SaveWriter.FormatVersion, 2, 500, w.Population, w.Graph.Data.SetHash), header);
     }
 
     [Fact]

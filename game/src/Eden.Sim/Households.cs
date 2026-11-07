@@ -295,11 +295,17 @@ public sealed partial class World
     private (float x, float z) PickHomeSite(float cx, float cz, float rMin, float rMax)
     {
         var hh = Households;
+        // M8: a home is where its hut will stand, so take the flattest clear candidate (ties: the earliest) instead of
+        // the first one.
+        float hutFoot = BuildingKinds.All[BuildingKinds.Hut].Footprint;
+        float bestSlope = float.MaxValue, homeX = cx, homeZ = cz;
         for (int attempt = 0; attempt < 20; attempt++)
         {
             float a = Rng.NextFloat() * MathF.Tau, r = rMin + Rng.NextFloat() * (rMax - rMin);
             float x = cx + MathF.Cos(a) * r, z = cz + MathF.Sin(a) * r;
-            if (!BuildableAt(x, z) || !SpotFree(x, z, 3f, -1)) continue;
+            if (!BuildableAt(x, z)) continue;
+            float slope = Terrain.SlopeUnder(x, z, hutFoot);
+            if (slope >= bestSlope || !SpotFree(x, z, 3f, -1)) continue;
             if (Pathing.Region[Terrain.CellIndex(x, z)] != Pathing.Region[Terrain.CellIndex(cx, cz)]) continue;
             bool clear = true;
             HouseholdBinRange(x, z, out int bx0, out int bx1, out int bz0, out int bz1);
@@ -307,8 +313,8 @@ public sealed partial class World
             for (int bx = bx0; bx <= bx1 && clear; bx++)
             for (int i = _hhHead[bz * _hhBinsX + bx]; i >= 0 && clear; i = _hhNext[i])
                 if (hh.Alive[i] && Sq(hh.HomeX[i] - x) + Sq(hh.HomeZ[i] - z) < 36f) clear = false;
-            if (clear) return (x, z);
+            if (clear) (bestSlope, homeX, homeZ) = (slope, x, z);
         }
-        return (cx, cz);
+        return (homeX, homeZ);
     }
 }

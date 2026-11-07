@@ -75,8 +75,10 @@ public static class EffectApplier
     /// <summary>True when the NPC knows a concept that unlocks <paramref name="buildingId"/> well enough to use it.</summary>
     public static bool CanBuild(World w, int slot, string buildingId)
     {
-        foreach (var n in w.Graph.Nodes)
+        var g = w.Graph;
+        for (int i = 0; i < g.Count; i++) // index loop: foreach over IReadOnlyList boxes an enumerator
         {
+            var n = g[i];
             if (w.Proficiency(slot, n.Id) < w.Config.UnlockProficiency) continue;
             foreach (var e in n.Concept.Effects)
                 if (e.Kind == ConceptEffectKind.UnlockBuilding && e.Building == buildingId) return true;
@@ -113,8 +115,10 @@ public static class EffectApplier
         uint actions = 0;
         ulong tools = 0;
         float u = w.Config.UnlockProficiency;
-        foreach (var n in w.Graph.Nodes)
+        var g = w.Graph;
+        for (int i = 0; i < g.Count; i++)
         {
+            var n = g[i];
             if ((n.ActionMask | n.ToolMask) == 0 || w.Proficiency(slot, n.Id) < u) continue;
             actions |= n.ActionMask;
             tools |= n.ToolMask;

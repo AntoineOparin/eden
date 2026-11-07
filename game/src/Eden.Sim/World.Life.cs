@@ -111,7 +111,7 @@ public sealed partial class World
         int s = Npcs.Allocate();
         Memories.Reset(s);
         EnsureKnowledgeSlot(s);
-        _knowledge[s]?.Clear();
+        ClearKnowledgeOf(s);
         GrantStarterKnowledge(s);
         Npcs.X[s] = x;
         Npcs.Z[s] = z;
@@ -164,7 +164,7 @@ public sealed partial class World
         int c = Npcs.Allocate();
         Memories.Reset(c);
         EnsureKnowledgeSlot(c);
-        _knowledge[c]?.Clear();
+        ClearKnowledgeOf(c);
         KnowledgeState.ResetSlot(c);
         Npcs.GenesOf(c).Clear();
         Npcs.UnbornOf(mother).CopyTo(Npcs.GenesOf(c));
@@ -221,7 +221,7 @@ public sealed partial class World
         Relationships.Forget(id);
         Memories.Reset(s);
         OnKnowledgeHolderDied(s);
-        _knowledge[s]?.Clear();
+        ClearKnowledgeOf(s);
         Npcs.Free(s);
         TotalDeaths++;
     }

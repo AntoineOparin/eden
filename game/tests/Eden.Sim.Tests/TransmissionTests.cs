@@ -194,6 +194,88 @@ public class TransmissionTests
         }
     }
 
+    [Theory]
+    [InlineData(3)]
+    [InlineData(8)]
+    [InlineData(12)]
+    public void On_real_settlements_a_concept_crosses_only_through_a_recorded_contact(int seed)
+    {
+        // M8 re-run of the M4 acceptance on M3 settlements: two villages founded the M3 way (households cluster, a daily
+        // update founds a settlement with a faction and a leader), 120-200 m apart on one landmass. Village A knows
+        // bronze casting (and teaching). Every first lesson leaves a "X showed/told/taught me ..." memory naming the
+        // teacher, so for each person in B who comes to know it we can name who they learned it from: the first one
+        // must have learned it from someone in A, and every later one from someone who already knew it.
+        var (w, ax, az) = Villages.World(seed);
+        var before = AliveIds(w);
+        int setA = Villages.Found(w, ax, az);
+        var idsA = AliveIds(w).Except(before).ToHashSet();
+        var (bx, bz) = Villages.SpotAway(w, ax, az);
+        before = AliveIds(w);
+        int setB = Villages.Found(w, bx, bz);
+        var idsB = AliveIds(w).Except(before).ToHashSet();
+        Assert.NotEqual(setA, setB);
+        Assert.All(idsA, id => Assert.Equal(setA, w.SettlementOfSlot(Slot(w, id))));
+        Assert.All(idsB, id => Assert.Equal(setB, w.SettlementOfSlot(Slot(w, id))));
+        foreach (int id in idsA)
+        {
+            w.SetKnowledge(Slot(w, id), "bronze-casting", 0.9f);
+            w.SetKnowledge(Slot(w, id), "teaching", 0.9f);
+        }
+
+        var knewAt = new Dictionary<int, long>(); // id -> tick they first knew it (A members: 0)
+        foreach (int id in idsA) knewAt[id] = 0;
+        int firstInB = -1;
+        void Check()
+        {
+            foreach (int id in idsB)
+            {
+                if (knewAt.ContainsKey(id) || !w.Npcs.TryGetSlot(id, out int s) || w.Proficiency(s, "bronze-casting") <= 0) continue;
+                var lesson = w.Memories.Of(s).FirstOrDefault(m => m.Kind == MemoryKind.Conversation && m.Text.Contains("bronze casting")
+                    && m.Subjects.Length == 2 && m.Subjects[1] == id);
+                Assert.True(lesson is not null, $"{w.Npcs.Name[s]} of B knows bronze casting at tick {w.Tick} with no lesson memory");
+                int teacher = lesson!.Subjects[0];
+                Assert.True(knewAt.ContainsKey(teacher), $"{w.Npcs.Name[s]} learned bronze casting from {teacher}, who did not know it");
+                if (firstInB < 0)
+                {
+                    firstInB = id;
+                    Assert.Contains(teacher, idsA); // the crossing itself is a contact with the other village
+                }
+                knewAt[id] = w.Tick;
+            }
+        }
+
+        // Three days on their own. Real villages do meet (explorers, traders, people out gathering), so the concept may
+        // cross already; whenever it does, Check has proved the crossing was a lesson from someone in A.
+        for (int t = 0; t < 3 * w.Config.TicksPerDay && firstInB < 0; t++) { w.Step(); Check(); }
+
+        // If it has not crossed yet, make the contact: a B villager walks into A and is told to talk with an A villager.
+        int visitor = idsB.First(id => w.Npcs.TryGetSlot(id, out _));
+        int host = idsA.First(id => w.Npcs.TryGetSlot(id, out _));
+        w.Npcs.X[Slot(w, visitor)] = w.Npcs.X[Slot(w, host)] + 1.5f;
+        w.Npcs.Z[Slot(w, visitor)] = w.Npcs.Z[Slot(w, host)];
+        for (int t = 0; t < 4 * w.Config.TicksPerDay && firstInB < 0; t++)
+        {
+            if (t % w.Config.TicksPerHour == 0 && w.Npcs.TryGetSlot(visitor, out _))
+                w.Apply(new GoalIntention(visitor, w.Tick, IntentionSource.Player, ActionKind.Talk, host.ToString(), null, 10));
+            w.Step();
+            Check();
+        }
+        Assert.True(firstInB >= 0, "contact did not carry bronze casting into village B");
+        Assert.True(knewAt[firstInB] > 0);
+
+        // Back home it spreads inside B, always from someone who knew it.
+        for (int t = 0; t < 10 * w.Config.TicksPerDay; t++) { w.Step(); Check(); }
+    }
+
+    private static HashSet<int> AliveIds(World w)
+    {
+        var ids = new HashSet<int>();
+        for (int s = 0; s < w.Npcs.HighWater; s++) if (w.Npcs.Alive[s]) ids.Add(w.Npcs.IdOf(s));
+        return ids;
+    }
+
+    private static int Slot(World w, int id) => w.Npcs.TryGetSlot(id, out int s) ? s : throw new InvalidOperationException($"npc {id} is dead");
+
     private static int Index(World w, string id) => w.Graph.TryIndex(id, out int i) ? i : -1;
 
     private static int Spawn(World w, (float x, float z) at, Sex sex) => w.SpawnAdult(at.x, at.z, sex, 20f);

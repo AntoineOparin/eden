@@ -94,7 +94,12 @@ public sealed class Terrain
     /// <summary>Recompute biomes, fertility, move cost and the water field from heights + moisture.</summary>
     public void RecomputeDerived()
     {
-        for (int i = 0; i < Heights.Length; i++)
+        for (int i = 0; i < Heights.Length; i++) RecomputeCell(i);
+        ComputeWaterField();
+    }
+
+    private void RecomputeCell(int i)
+    {
         {
             float h = Heights[i] - SeaLevel;
             var b = Classify(h, Moisture[i]);
@@ -117,7 +122,79 @@ public sealed class Terrain
                 _ => 3f,
             };
         }
-        ComputeWaterField();
+    }
+
+    /// <summary>
+    /// M8 site picker: the height range (max − min, metres) of the land cells whose centres lie within
+    /// <paramref name="radius"/> of (x, z), divided by the footprint diameter: a rise-over-run slope across the footprint.
+    /// </summary>
+    public float SlopeUnder(float x, float z, float radius)
+    {
+        float lo = float.MaxValue, hi = float.MinValue, r2 = radius * radius;
+        DiscBounds(x, z, radius, out int cx0, out int cx1, out int cz0, out int cz1);
+        for (int cz = cz0; cz <= cz1; cz++)
+        for (int cx = cx0; cx <= cx1; cx++)
+        {
+            float dx = cx * CellSize - x, dz = cz * CellSize - z;
+            if (dx * dx + dz * dz > r2) continue;
+            float h = Heights[cz * Width + cx];
+            if (h < lo) lo = h;
+            if (h > hi) hi = h;
+        }
+        return hi < lo ? 0f : (hi - lo) / MathF.Max(CellSize, 2f * radius);
+    }
+
+    /// <summary>
+    /// M8: pull the land cells under a finished building toward their mean height (by <paramref name="strength"/> inside
+    /// the footprint, fading to nothing one cell outside it). Land stays land (a cell never drops to the sea), so the
+    /// water field and the walkable regions cannot change; biome, fertility and move cost are recomputed for the touched
+    /// cells only. Deterministic: cells are visited in index order. Returns true if any height changed.
+    /// </summary>
+    public bool FlattenDisc(float x, float z, float radius, float strength)
+    {
+        double sum = 0;
+        int count = 0;
+        float r2 = radius * radius;
+        DiscBounds(x, z, radius, out int cx0, out int cx1, out int cz0, out int cz1);
+        for (int cz = cz0; cz <= cz1; cz++)
+        for (int cx = cx0; cx <= cx1; cx++)
+        {
+            float dx = cx * CellSize - x, dz = cz * CellSize - z;
+            int cell = cz * Width + cx;
+            if (dx * dx + dz * dz > r2 || !IsLand(cell)) continue;
+            sum += Heights[cell];
+            count++;
+        }
+        if (count == 0) return false;
+        float target = (float)(sum / count);
+        bool changed = false;
+        float outer = radius + CellSize;
+        DiscBounds(x, z, outer, out cx0, out cx1, out cz0, out cz1);
+        for (int cz = cz0; cz <= cz1; cz++)
+        for (int cx = cx0; cx <= cx1; cx++)
+        {
+            float dx = cx * CellSize - x, dz = cz * CellSize - z;
+            float d = MathF.Sqrt(dx * dx + dz * dz);
+            int cell = cz * Width + cx;
+            if (d > outer || !IsLand(cell)) continue;
+            float w = strength * (d <= radius ? 1f : 1f - (d - radius) / CellSize);
+            if (w <= 0f) continue;
+            float h = Heights[cell];
+            float next = MathF.Max(h + (target - h) * w, SeaLevel + 0.05f);
+            if (next == h) continue;
+            Heights[cell] = next;
+            RecomputeCell(cell);
+            changed = true;
+        }
+        return changed;
+    }
+
+    private void DiscBounds(float x, float z, float radius, out int cx0, out int cx1, out int cz0, out int cz1)
+    {
+        cx0 = Math.Max(0, (int)MathF.Floor((x - radius) / CellSize));
+        cx1 = Math.Min(Width - 1, (int)MathF.Ceiling((x + radius) / CellSize));
+        cz0 = Math.Max(0, (int)MathF.Floor((z - radius) / CellSize));
+        cz1 = Math.Min(Height - 1, (int)MathF.Ceiling((z + radius) / CellSize));
     }
 
     private void ComputeWaterField()

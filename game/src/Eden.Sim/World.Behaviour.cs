@@ -25,6 +25,7 @@ public sealed partial class World
         int nb = s * Needs.Count, gb = s * Genetics.Count;
         bool adult = stage is LifeStage.Adult or LifeStage.Elder;
         float x = n.X[s], z = n.Z[s];
+        _nearMemoSlot = -1;
 
         var c = new DecisionContext
         {
@@ -74,6 +75,7 @@ public sealed partial class World
         Span<float> scores = stackalloc float[ActionScorer.ActionCount];
         ActionScorer.ScoreAll(in c, scores);
         ScoreKnowledge(s, stage, scores);
+        _nearMemoSlot = -1; // M8: the nearest-NPC memo lives only inside one decision (see FindNearestNpc)
         ScoreMyth(s, scores); // M7: shrines draw prayer
         var best = ActionScorer.Best(scores);
 
@@ -503,7 +505,10 @@ public sealed partial class World
         for (int bx = bx0; bx <= bx1; bx++)
         for (int o = _grid.Head(bx, bz); o >= 0; o = _grid.Next(o))
         {
-            if (!n.Alive[o] || !IsEligibleMate(s, o)) continue;
+            // M8: cheap pure tests first (sex, partner, distance), then the full eligibility check, as before.
+            if (!n.Alive[o] || n.Sex[o] == n.Sex[s] || SurelyFarther(x, z, o, r)) continue;
+            if (n.Partner[o] != Npcs.None && n.Partner[o] != n.IdOf(s)) continue;
+            if (!IsEligibleMate(s, o)) continue;
             float d = Dist(x, z, n.X[o], n.Z[o]);
             if (d > r) continue;
             if (IsKin(s, o)) d += 60f;
@@ -512,7 +517,20 @@ public sealed partial class World
         return bestSlot;
     }
 
+    // M8: one decision asks for the same nearest NPC up to three times (talk, teach, learn) while nothing that the
+    // search reads (positions, life, age) changes, so Decide memoizes it from its start until scoring ends.
+    private int _nearMemoSlot = -1, _nearMemoResult;
+    private float _nearMemoRadius;
+
     private int FindNearestNpc(int s, float radius)
+    {
+        if (_nearMemoSlot == s && _nearMemoRadius == radius) return _nearMemoResult;
+        int found = FindNearestNpcUncached(s, radius);
+        (_nearMemoSlot, _nearMemoRadius, _nearMemoResult) = (s, radius, found);
+        return found;
+    }
+
+    private int FindNearestNpcUncached(int s, float radius)
     {
         var n = Npcs;
         float x = n.X[s], z = n.Z[s];
@@ -523,14 +541,21 @@ public sealed partial class World
         for (int bx = bx0; bx <= bx1; bx++)
         for (int o = _grid.Head(bx, bz); o >= 0; o = _grid.Next(o))
         {
-            if (o == s || !n.Alive[o] || StageOf(o) == LifeStage.Infant) continue;
+            // M8: same tests as before, cheapest first (all pure, so the order cannot change the result).
+            if (o == s || !n.Alive[o] || SurelyFarther(x, z, o, best) || IsInfant(o)) continue;
             float d = Dist(x, z, n.X[o], n.Z[o]);
             if (d < best) { best = d; bestSlot = o; }
         }
         return bestSlot;
     }
 
-    /// <summary>Nearest hungry child or infant this adult is kin to (or carries).</summary>
+    /// <summary>
+    /// Nearest hungry child or infant this adult is kin to (or carries). M8: instead of walking every NPC within the
+    /// search square, it walks the adult's kin only (its children, and the children of its mother and of its father:
+    /// a dependant must be younger, so parents never qualify), keeps the same filters, including "its bin was inside
+    /// the search square at the start of the tick", and breaks distance ties in grid-scan order, so it returns exactly
+    /// what the scan returned.
+    /// </summary>
     private int FindHungryDependent(int s)
     {
         var n = Npcs;
@@ -538,21 +563,70 @@ public sealed partial class World
         float best = float.MaxValue;
         int bestSlot = -1;
         _grid.Range(x, z, r, out int bx0, out int bx1, out int bz0, out int bz1);
-        for (int bz = bz0; bz <= bz1; bz++)
-        for (int bx = bx0; bx <= bx1; bx++)
-        for (int o = _grid.Head(bx, bz); o >= 0; o = _grid.Next(o))
+        EnsureKinIndex();
+        int self = n.IdOf(s), mother = n.Mother[s], father = n.Father[s];
+        for (int pass = 0; pass < 3; pass++)
         {
-            if (o == s || !n.Alive[o]) continue;
-            var st = StageOf(o);
-            if (st is LifeStage.Adult or LifeStage.Elder) continue;
-            // Children hold food themselves; feed them only when they are hungry and empty-handed.
-            if (n.Need(o, Need.Food) > 0.45f || (st == LifeStage.Child && n.Food[o] >= 1f)) continue;
-            if (!IsKin(s, o)) continue;
-            float d = Dist(x, z, n.X[o], n.Z[o]);
-            if (d < best) { best = d; bestSlot = o; }
+            int parent = pass == 0 ? self : pass == 1 ? mother : father;
+            if (parent == Npcs.None || (pass == 2 && father == mother) || !_kidsHead.TryGetValue(parent, out int o)) continue;
+            for (; o >= 0; o = n.Mother[o] == parent ? _kidsNextM[o] : _kidsNextF[o])
+            {
+                if (o == s || !n.Alive[o] || !_grid.InRange(o, bx0, bx1, bz0, bz1)) continue;
+                if (n.Need(o, Need.Food) > 0.45f || SurelyFarther(x, z, o, best)) continue;
+                var st = StageOf(o);
+                if (st is LifeStage.Adult or LifeStage.Elder) continue;
+                // Children hold food themselves; feed them only when they are hungry and empty-handed.
+                if (st == LifeStage.Child && n.Food[o] >= 1f) continue;
+                if (!IsKin(s, o)) continue;
+                float d = Dist(x, z, n.X[o], n.Z[o]);
+                if (d < best || (d == best && ScanOrderBefore(o, bestSlot))) { best = d; bestSlot = o; }
+            }
         }
         return bestSlot;
     }
+
+    private bool ScanOrderBefore(int a, int b)
+    {
+        int ba = _grid.BinIndexOf(a), bb = _grid.BinIndexOf(b);
+        return ba < bb || (ba == bb && a < b);
+    }
+
+    // M8 kin index: parent id -> first child slot, then per child the next sibling through its mother and its father.
+    // Built on first use in a tick (no one is born during the NPC loop; births come after it) and keyed by id, so the
+    // children of a dead parent stay siblings, as IsKin has it. Allocation-free once the dictionary has grown.
+    private readonly Dictionary<int, int> _kidsHead = new();
+    private int[] _kidsNextM = [], _kidsNextF = [];
+    private long _kidsTick = -1;
+
+    private void EnsureKinIndex()
+    {
+        if (_kidsTick == Tick) return;
+        _kidsTick = Tick;
+        var n = Npcs;
+        if (_kidsNextM.Length < n.Capacity) { _kidsNextM = new int[n.Capacity]; _kidsNextF = new int[n.Capacity]; }
+        _kidsHead.Clear();
+        for (int c = 0; c < n.HighWater; c++)
+        {
+            if (!n.Alive[c]) continue;
+            int m = n.Mother[c], f = n.Father[c];
+            if (m != Npcs.None) { _kidsNextM[c] = _kidsHead.TryGetValue(m, out int hm) ? hm : -1; _kidsHead[m] = c; }
+            if (f != Npcs.None && f != m) { _kidsNextF[c] = _kidsHead.TryGetValue(f, out int hf) ? hf : -1; _kidsHead[f] = c; }
+        }
+    }
+
+    /// <summary>
+    /// M8: true only when slot <paramref name="o"/> is certainly farther than <paramref name="best"/> from (x, z), using
+    /// squared distances with a margin far above float rounding, so every slot that could still win is measured exactly
+    /// as before (<see cref="Dist"/>, strict comparison) and search results cannot change.
+    /// </summary>
+    private bool SurelyFarther(float x, float z, int o, float best)
+    {
+        float dx = x - Npcs.X[o], dz = z - Npcs.Z[o];
+        return dx * dx + dz * dz > best * best * 1.0001f;
+    }
+
+    /// <summary>Same as <c>StageOf(s) == LifeStage.Infant</c> without the elder test.</summary>
+    private bool IsInfant(int s) => AgeYears(s) < 3;
 
     private static float Dist(float ax, float az, float bx, float bz)
     {

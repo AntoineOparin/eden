@@ -298,6 +298,12 @@ public sealed partial class World
             && TryPlaceNear(set, BuildingKinds.Storehouse, st.CenterX[set], st.CenterZ[set], 4f, 14f)) return;
     }
 
+    /// <summary>
+    /// M8: set when a finished building flattened the ground. The renderer's copy of the heightmap is refreshed once per
+    /// in-game year rather than on every completion, because the terrain rebuilds every chunk when it changes.
+    /// </summary>
+    private bool _heightsChangedByBuildings;
+
     private bool TryPlaceHut(int set)
     {
         if (!IsBuildingUnlocked(set, BuildingKinds.Hut)) return false;
@@ -316,17 +322,24 @@ public sealed partial class World
     {
         if (!IsBuildingUnlocked(set, kind)) return false;
         float foot = BuildingKinds.All[kind].Footprint;
+        // M8: look at all 16 candidates and build on the flattest acceptable one (ties: the earliest), so sites sit on
+        // level ground like the render's foundations assume; before M8 the first acceptable candidate won. A preference,
+        // not a limit: a hilly village still builds (a hard slope cap stalled seed 5 at one settlement).
+        float bestSlope = float.MaxValue, bx = 0, bz = 0;
         for (int attempt = 0; attempt < 16; attempt++)
         {
             float a = Rng.NextFloat() * MathF.Tau, r = rMin + Rng.NextFloat() * (rMax - rMin);
             float x = cx + MathF.Cos(a) * r, z = cz + MathF.Sin(a) * r;
             if (!BuildableAt(x, z)) continue;
             if (kind == BuildingKinds.FarmPlot && Terrain.Fertility[Terrain.CellIndex(x, z)] < 0.35f) continue;
+            float slope = Terrain.SlopeUnder(x, z, foot);
+            if (slope >= bestSlope) continue;
             if (!SpotFree(x, z, foot, -1)) continue;
-            Buildings.Add(kind, x, z, Rng.NextFloat() * MathF.Tau, set, -1);
-            return true;
+            (bestSlope, bx, bz) = (slope, x, z);
         }
-        return false;
+        if (bestSlope == float.MaxValue) return false;
+        Buildings.Add(kind, bx, bz, Rng.NextFloat() * MathF.Tau, set, -1);
+        return true;
     }
 
     private bool BuildableAt(float x, float z)
@@ -407,6 +420,10 @@ public sealed partial class World
         TotalBuildingsCompleted++;
         RefreshStores();
         if (kind == BuildingKinds.Archive) AddRecordSite(b.X[site], b.Z[site], site); // M4 written records live in archives
+        // M8: level the ground under the finished building a little (docks stand in the water and are left alone).
+        if (kind != BuildingKinds.Dock && Config.FoundationFlatten > 0f
+            && Terrain.FlattenDisc(b.X[site], b.Z[site], BuildingKinds.All[kind].Footprint, Config.FoundationFlatten))
+            _heightsChangedByBuildings = true;
         if (kind is BuildingKinds.Storehouse or BuildingKinds.Well && Settlements.IsAlive(set))
         {
             string what = kind == BuildingKinds.Storehouse ? "a storehouse" : "a well";

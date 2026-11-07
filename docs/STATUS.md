@@ -9,15 +9,15 @@ merge; keep the "Now" block at the top current. Numbers here are measured on Ant
 - **Merged on main:** M0 tooling + contracts, M1 sim core, M2 render shell, brain Worker (M5-ready),
   M3 society, M4 knowledge, M5 minds, K1 knowledge balance, M7 myth (sim + Mind side), A1 art pass, M7 UI pass, M6 possession.
   See git log for the head.
-- **In flight (phase 5, launched 2026-11-07 from tag phase5-base):** M8 scale (branch m8-scale), A2 art follow-ups
-  (a2-art-followups), C1 contract pass for settlements and the Chronicle (c1-contract-pass). C1 merged 2d55986, A2 merged; M8 still in flight.
+- **Phase 5 (launched 2026-11-07 from tag phase5-base, nothing in flight):** M8 scale (branch m8-scale), A2 art follow-ups
+  (a2-art-followups), C1 contract pass for settlements and the Chronicle (c1-contract-pass). All three merged on 2026-11-07 in the order C1 (2d55986), A2 (e0995df), M8.
 - **Next per plan:** M8 scale (asset export, hitches, population ~2,000 by year 120); art follow-ups
   (clouds, animals, bridges, less chibi characters); knowledge roadmap items 4–6. Worker deploy needs Antoine's go-ahead.
 - **Checks:** `./scripts/check.sh` = contracts (5 schemas, 19 fixtures, concepts.json 95 concepts),
-  279 Eden.Sim tests (~4–5 min; the Slow society test is capped at 150 years), 69 Eden.Game gdUnit4
-  tests, headless boot, 85 Worker tests (C1 branch numbers).
-- **Known slow spot:** the three Slow Sim tests (population, society, pacing) take about 3 minutes
-  together; the full in-band pacing test runs only with `EDEN_PACE_FULL=1` (~40 min).
+  299 Eden.Sim tests (~1–2 min after M8; the Slow society test is capped at 150 years), 69 Eden.Game gdUnit4
+  tests, headless boot, 85 Worker tests.
+- **Known slow spot:** the Slow Sim tests take about 52 s together after M8; the full in-band pacing test runs only
+  with `EDEN_PACE_FULL=1` (17.5 min of Release simulation) and its bronze band fails after M8 (backlog).
 - **Not deployed:** the Worker runs only through `wrangler dev` on localhost.
 
 ## 2026-11-06 — M0 (commit 9ab043a)
@@ -493,3 +493,72 @@ dialogue panel at 900 px only while both are open).
 dense towns hide most road strips between houses; clouds show best from 250 m up (`fx-rain-sky.jpg`). Weather is
 inferred, not read from the snapshot; lightning has no bolt; characters are about 1:4.5, not 1:6; animals drift but do
 not walk (backlog rows). `Dev/FrameTimeProbe.cs` (unowned) gained the hitch log.
+## 2026-11-07 — M8 scale pass (branch m8-scale)
+
+**What.** Sim tick at scale without changing results: nearest-NPC memo per decision, squared-distance pre-rejects,
+one resource search per kind in `FindCraft`, a per-tick kin index for `FindHungryDependent` (ties broken in grid-scan
+order), proficiency rows by concept index for the knowledge loops, incidental allocations removed (boxed enumerators,
+list/dictionary growth, `Lower()`, `Relationships.Forget`). Save format version 2: Brotli sections, a shared memory table
+in `MEMS` v2, `conceptSet` in the header, all-or-nothing loads through a scratch world, version policy in
+`10-sim-core.md`, a version-1 fixture. Building sites take the flattest candidate and finished buildings level the
+ground under them (deliberate hash change). `SimConfig.DataOverrideDir` + `user://data/` hook (`Dev/DataOverride.cs`,
+one line in `Main._Ready`). The M4 contact acceptance re-run on real M3 settlements. Export: `game/export_presets.cfg`
+(macOS universal, Linux x86_64), `game/tools/export/export.sh`, `build/` ignored. Runner: `--save-bench`,
+`--bench-world`, a hash column in `--seeds`. Details: DECISIONS 2026-11-07 "M8: …".
+
+**How verified.**
+
+- `./scripts/check.sh` green from the worktree root: contracts, Eden.Sim tests 288 (was 268; 55 s in that run),
+  Eden.Game gdUnit4 53, headless boot, Worker 85; the whole script took 67 s.
+- New tests: `SaveFormatTests` (8: v1 fixture loads with its recorded hash and round-trips through v2; a real save cut
+  at nine offsets is refused and leaves the target world's hash and tick unchanged; damaged Brotli body; unknown section
+  skipped; newer section and format versions refused; memories shared after a load; concept set in the header; the
+  load command logs a damaged file), `DataOverrideTests` (5), `BuildingSiteTests` (4),
+  `TransmissionTests.On_real_settlements_a_concept_crosses_only_through_a_recorded_contact` (3 seeds, ~0.15 s each).
+- Determinism: `--seeds 1..20 --years 120` state hashes identical to phase5-base after the tick work, and identical to
+  the previous commit after the kin index. The site picker changes them on purpose (seed 20: B52D5CFBBF4259B0 →
+  A6629BBF134DFAAC); sweep medians stay put (DECISIONS).
+- Exported build: `game/tools/export/export.sh` → `build/macos/Eden.app` (347 MB, PCK 11.5 MB with the assets). Run as
+  `build/macos/Eden.app/Contents/MacOS/Eden --resolution 1600x900 --disable-vsync -- --load-world=<seed-20 year-120
+  save> --focus=town --zoom=140 --no-brain --log-fps --log-frame-time --screenshot=… --quit-after=20`: prints
+  "Eden boot ok", loads the save (1,614 people), no errors, draws the Kenney buildings, crops, characters, Nunito UI
+  and icons (screenshot checked; not committed). Data: the sim's JSON is embedded in Eden.Sim and `data/*.json` is in
+  the PCK too. Linux export built, not run.
+
+**Numbers.** M4 Pro, Release runner, quiet machine (load < 4) unless noted. "Before" = phase5-base code on the same
+saved worlds; 1,400 = seed 20 year 120 (1,442 people at save, ~1,465 while measured); 5,000 = seed 20 grown 150 years
+with `--set MaxFarmPlotsPerSettlement=40 --set FarmYield=40` (bench only; 5,014 at save, ~5,290 while measured; without
+the raised caps seed 20 peaks at 1,866 in year 130 and falls back). One in-game year (2,400 ticks), two runs each.
+
+| Measure | Before | After |
+|---|---|---|
+| Tick, 1,400 NPCs (mean / median ms) | 0.95–1.16 / 0.79–0.82 | 0.93–0.96 / 0.65–0.77 |
+| Tick, 5,000 NPCs real world (mean / median ms) | 6.42–6.60 / 6.36–6.57 | 3.20–3.25 / 2.98–3.05 |
+| Tick, 5,000 NPCs `--bench 5000` (spawned strangers) | 3.53 ms | 2.55 ms |
+| Allocated per tick, 1,400 (all / non-daily ticks) | 3,148 / 3,143 B | 1,195 / 1,188 B |
+| Allocated per tick, 5,000 real | 8,813 B | 3,411 B |
+| Allocated per tick, `--bench 5000` | 3,947 B | 2,353 B |
+| Daily tick, 1,400 / 5,000 | 3.3 / 11.4 ms | 3.6 / 9.0 ms |
+| Save size, seed 20 year 120 | 20.65 MB | 3.73 MB (same world); 4.69 MB for the new trajectory's 1,617 people |
+| Save size, 5,000 NPCs | 117.8 MB | 10.6 MB |
+| Save / load in memory, year 120 | 0.059 s / 0.098 s | 0.10 s / 0.10 s |
+| Save / load from file, year 120 | 0.084 s / 0.200 s | 0.10 s / 0.15 s; in place through the scratch world (what `LoadCommand` does) 0.25 s, 0.37 s for the 1,617-person world (both measured with a sweep running) |
+| Save / load in memory, 5,000 NPCs | 0.24 s / 0.40 s | 0.31 s / 0.22 s |
+| Slow Sim tests (Debug, `dotnet test --filter Category=Slow`) | 221 s (society 3 m 39 s, population 12 s, pacing 13 s) | 52 s (society 51 s, population 11 s, pacing 10 s) |
+| Full pacing work as a Release sweep (`--seeds 1..20 --years 500 --pace`) | 34.8 min (phase5-base, machine shared with other agents for part of it) | 17.5 min; the `EDEN_PACE_FULL=1` test in Debug ran over an hour and was stopped, so it stays opt-in |
+| `--seeds 1..20 --years 120` sweep (Release, 12 cores) | 2 m 49 s | 1 m 50 s |
+| Exported app, seed 20 year 120, 1,600×900 | – | 119.9 fps avg (min 119; the display caps at 120 Hz even with `--disable-vsync`); scripts 0.4–2.5 ms, render CPU 0.2–3.4 ms per frame, ~785 fps possible on average (min 507); 274–548 draw calls |
+| Exported app, 5,000-NPC world (5,087–5,103 people) | – | 217 fps avg (min 182; the cap was not applied on this run); scripts 0.7–1.2 ms, render CPU 0.2–0.3 ms, ~1,029 fps possible on average (min 714); 262–510 draw calls. A second seed-20 run reached 152 fps avg (min 145): the macOS display cap moves between 120 and 200 Hz, so the frame-time line is the comparable number |
+
+What still allocates on a non-daily tick is the `Memory` objects, texts and subject arrays of gossip retellings, first
+lessons and beliefs (saved state; backlog row); 23 % of the 1,400-NPC ticks allocate nothing. The remaining hot spots at
+5,000 NPCs are the mate and nearest-NPC scans over 32 m bins in big towns and memory eviction (500 per NPC).
+
+Pacing bands after the deliberate trajectory change (same Release sweep): median writing year 200 → 198 (band
+150–250), median bronze year 408 → 479 (band 300–450): 10 of 18 living seeds cast bronze, 9 of them by year 450, where
+phase5-base had 11 of 18. So the opt-in `Median_seed_writes_and_casts_bronze_inside_the_bands` would now fail its bronze
+assertion. This pass does not retune balance; the bimodal-bronze backlog row now carries it.
+
+**Not done.** Mind batching (optional item 6: it needs provider changes in Eden.Mind and the Worker; backlog row kept).
+The data override was not tried in the exported app (its `user://` folder is shared with the editor runs of the other
+agents); `DataOverrideTests` cover it. Linux build not run.

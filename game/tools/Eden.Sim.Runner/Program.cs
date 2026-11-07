@@ -11,8 +11,9 @@ using Eden.Sim.Contracts;
 //   ... --set ForgetRatePerYear=0 --set ChatterRate=0.02   (override any SimConfig tunable, for balance passes)
 
 if (Array.IndexOf(args, "--myth") >= 0) return MythReport.Run(args); // M7: --myth [--seed N] [--years Y] [--bless|--strike]
-int seed = 7, years = 60, tail = 15, bench = 0, traceDays = 0;
+int seed = 7, years = 60, tail = 15, bench = 0, traceDays = 0, benchTicks = 500;
 bool knowledge = false;
+string? saveBench = null, benchWorld = null;
 (int from, int to)? sweep = null;
 for (int i = 0; i < args.Length; i++)
 {
@@ -27,6 +28,9 @@ for (int i = 0; i < args.Length; i++)
         case "--bench": bench = int.Parse(Next()); break;
         case "--trace": traceDays = int.Parse(Next()); break;
         case "--knowledge": knowledge = true; break;
+        case "--save-bench": saveBench = Next(); break;   // M8: --save-bench PATH [--seed S --years Y]: save/load timing and sizes
+        case "--bench-world": benchWorld = Next(); break; // M8: --bench-world PATH [--ticks N]: ms and bytes per tick on a saved real world
+        case "--ticks": benchTicks = int.Parse(Next()); break;
         case "--seeds":
         {
             var parts = Next().Split("..");
@@ -39,6 +43,8 @@ for (int i = 0; i < args.Length; i++)
     }
 }
 
+if (saveBench is not null) return ScaleBench.SaveLoad(saveBench, seed, years);
+if (benchWorld is not null) return ScaleBench.World(benchWorld, benchTicks);
 if (bench > 0) return Bench(bench);
 if (traceDays > 0) return Trace(seed, traceDays);
 if (sweep is { } range) return Sweep(range.from, range.to, years);
@@ -64,7 +70,7 @@ return 0;
 
 static int Sweep(int from, int to, int years)
 {
-    Console.WriteLine("seed  final  peak  reached50  gen@50  maxGen  settl  founded  trades  raids  leaders  2settl@  trade@  raid@  writing@  bronze@  known  outcome");
+    Console.WriteLine("seed  final  peak  reached50  gen@50  maxGen  settl  founded  trades  raids  leaders  2settl@  trade@  raid@  writing@  bronze@  known  outcome  hash");
     var results = new string[to - from + 1];
     Parallel.For(from, to + 1, s =>
     {
@@ -90,7 +96,7 @@ static int Sweep(int from, int to, int years)
         string outcome = extinctYear > 0 ? $"died out in year {extinctYear}" : reachedYear > 0 ? "grew" : "alive, under 50";
         results[s - from] = $"{s,4}  {w.Population,5}  {peak,4}  {(reachedYear > 0 ? "year " + reachedYear : "-"),9}  {(genAt50 >= 0 ? genAt50.ToString() : "-"),6}  {w.MaxLineage,6}"
             + $"  {w.SettlementCount,5}  {w.TotalSettlementsFounded,7}  {w.TotalTrades,6}  {w.TotalRaids,5}  {w.LeadersChosen,7}"
-            + $"  {Yr(twoAt),7}  {Yr(tradeAt),6}  {Yr(raidAt),5}  {Yr(writingAt),8}  {Yr(bronzeAt),7}  {w.Graph.KnownAnywhereCount(),5}  {outcome}";
+            + $"  {Yr(twoAt),7}  {Yr(tradeAt),6}  {Yr(raidAt),5}  {Yr(writingAt),8}  {Yr(bronzeAt),7}  {w.Graph.KnownAnywhereCount(),5}  {outcome}  {w.StateHash():X16}";
         Console.Error.WriteLine(results[s - from]); // progress for long sweeps; stdout keeps the ordered table
     });
     foreach (var line in results) Console.WriteLine(line);

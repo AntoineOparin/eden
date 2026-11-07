@@ -105,9 +105,48 @@ for 14 years. Saved in the `MYTH` section, hashed. Myth rolls use their own seed
 **Chronicle and events.** `EventBus` (in-sim, synchronous) feeds the Chronicle list that the
 snapshot exposes as `NewChronicle`, the memory recorder, and the settlement logic.
 
-**Save/load.** `SaveWriter`/`SaveReader`: JSON header `{ version, seed, tick, population }` +
+**Save/load.** `SaveWriter`/`SaveReader`: JSON header `{ version, seed, tick, population, conceptSet }` +
 binary body (little-endian, versioned sections). `SaveCommand`/`LoadCommand` run on the sim
-thread. Round-trip must preserve `StateHash()`.
+thread. Round-trip must preserve `StateHash()`. A load is all or nothing (M8): the body is first read into a
+scratch world; only a body that loaded cleanly there is read into the live world, so a truncated or damaged file
+throws `InvalidDataException` (the commands log "load failed: …") and leaves the world as it was.
+
+**Save format and versions (M8).** Layout: `"EDEN"`, int32 header length, UTF-8 JSON header, then sections until
+the end of the file. Format version 2 frames a section as tag (4 ASCII bytes), section version (int16), flags
+(byte; bit 0 = Brotli), stored length (int32), and, when compressed, the raw length (int32) before the bytes.
+Format version 1 had no flags byte. Sections of 4 KB or more are Brotli-compressed (quality 1) when that saves
+space. `MEMS` is at section version 2: a table of distinct memories (one event remembered by forty witnesses is
+written once) and per-NPC streams of varint table indices; the load shares one `Memory` object per entry again.
+Every other section is still at version 1. `conceptSet` is `KnowledgeData.SetHash` of the data the world was made
+with (a load logs when it differs from the data now in use).
+
+Version policy:
+- `SaveWriter.FormatVersion` changes only when the framing changes (how sections are found, sized or decoded).
+  A reader accepts every format from `SaveWriter.OldestReadable` (1) to its own and refuses a newer one with
+  "save version N is newer than this build".
+- A section's own version changes when the layout inside that section changes. Its reader must accept every older
+  version it has shipped (keep the old read path, as `MemoryStore.ReadVersion1` does) and refuse a newer one.
+- New state goes in a new section where it can: readers ignore tags they do not know, so older builds still load
+  the file (they drop that state). Additive tail blocks inside a section carry their own version (the K1 block in
+  `KNW2`). A section that older saves lack must have a default (`SOCI`, `KNW2`, `MYTH` are optional; `CONF`,
+  `CLCK`, `TERR`, `RSRC`, `NPCS`, `MEMS`, `RELS`, `KNOW`, `MISC` are required).
+- Every length is checked against what is left in the file before anything is read, and every count inside
+  a section is bounded, so a cut-off or corrupt file fails with a message instead of a half-loaded world.
+- A format change keeps a fixture of the previous format under `game/tests/Eden.Sim.Tests/Fixtures/` and a test
+  that loads it (`SaveFormatTests`, `save-v1-seed1-year1.eden`).
+
+**Data override (M8, roadmap item 5).** `SimConfig.DataOverrideDir` names a folder whose `concepts.json`,
+`resources.json`, `buildings.json` and `tools.json` replace the shipped ones (missing files fall back to the shipped
+copy). `KnowledgeData.FromDirectory` parses them with the same parser and graph checks as the shipped data and throws
+`InvalidDataException("data override <dir>: …")` on any problem. Eden.Game passes `user://data` when it exists
+(`Dev/DataOverride.cs`; a bad set is reported and the shipped data is used).
+
+**Building sites (M8).** `TryPlaceNear` and `PickHomeSite` evaluate all their random candidates and take the
+flattest acceptable one (`Terrain.SlopeUnder`: height range over the footprint ÷ its diameter); candidates steeper
+than `MaxBuildSlope` (0.6) are skipped, and huts are not built on home spots steeper than that. A finished building
+(not a dock) pulls the land under its footprint halfway to the footprint's mean height (`FoundationFlatten` 0.5,
+fading over one cell outside it; land never drops to the sea, so regions and the water field are unchanged). The
+renderer's copy of the heightmap is refreshed once per in-game year after such changes.
 
 **Threading.** `SimHost.Start()` spawns one thread: fixed step accumulator, honours
 `TimeScale`, publishes an immutable `WorldSnapshot` after each batch (double buffer, `Volatile`
@@ -136,8 +175,12 @@ least one trade and one raid Chronicle entry.
 M4: a concept reaches a second settlement only after a recorded contact; removing all knowers of
 a concept with no written record removes it from the world (`ConceptGraph.KnownAnywhere`).
 
-Everything in this project runs in under 1 s for the whole suite except the population tests,
-which are tagged `[Trait("Category", "Slow")]` and must stay under 20 s.
+M4 on real settlements (M8): `TransmissionTests.On_real_settlements_a_concept_crosses_only_through_a_recorded_contact`
+founds two M3 villages 120–200 m apart and checks, every tick, that each villager of B who knows the concept has a
+lesson memory naming someone who already knew it, and that the first one learned it from someone in A.
+
+Everything in this project runs in under 1 s for the whole suite except the population, society and pacing
+acceptance tests, which are tagged `[Trait("Category", "Slow")]` (see STATUS for their wall times).
 
 ## Carried-over items
 

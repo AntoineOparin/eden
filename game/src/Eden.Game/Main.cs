@@ -72,7 +72,8 @@ public partial class Main : Node
         CameraRig = GetNodeOrNull<GodCameraRig>("GodRig");
         Hud = GetNodeOrNull<Hud>("Hud");
 
-        ISimHost host = UseFakeSim ? new FakeSimHost(FakeNpcCount, Seed) : new SimHost(new SimConfig { Seed = Seed });
+        // M8: user://data/ overrides the shipped concept data when present (Dev/DataOverride.cs).
+        ISimHost host = UseFakeSim ? new FakeSimHost(FakeNpcCount, Seed) : new SimHost(DataOverride.Apply(new SimConfig { Seed = Seed }));
         if (_fastForwardYears > 0 || _fastForwardHour >= 0) FastForward(host, _fastForwardYears, _fastForwardHour);
         host.Start();
         Host = host;

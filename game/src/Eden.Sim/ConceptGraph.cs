@@ -20,6 +20,15 @@ public sealed class KnowledgeData
     public IReadOnlySet<string> Buildings { get; }
     public IReadOnlyList<ToolDef> Tools { get; }
 
+    /// <summary>
+    /// M8: hash of the four JSON texts (16 hex digits, process-independent). Saves record it so a world can tell
+    /// which concept set it was created with (<see cref="SaveHeader.ConceptSet"/>).
+    /// </summary>
+    public string SetHash { get; private init; } = "";
+
+    /// <summary>The override folder this set was read from, or null for the shipped data.</summary>
+    public string? Source { get; private init; }
+
     private KnowledgeData(IReadOnlyList<ConceptDef> concepts, IReadOnlySet<string> resources, IReadOnlySet<string> buildings, IReadOnlyList<ToolDef> tools)
     {
         Concepts = concepts;
@@ -28,11 +37,46 @@ public sealed class KnowledgeData
         Tools = tools;
     }
 
+    private static readonly string[] Files = ["concepts.json", "resources.json", "buildings.json", "tools.json"];
+
     private static readonly Lazy<KnowledgeData> _default = new(() => Parse(
         Embedded("concepts.json"), Embedded("resources.json"), Embedded("buildings.json"), Embedded("tools.json")));
 
     /// <summary>The shipped data. Thread-safe, parsed on first use.</summary>
     public static KnowledgeData Default => _default.Value;
+
+    /// <summary>The data a world with this config uses: the override folder if one is set, else the shipped data.</summary>
+    public static KnowledgeData For(SimConfig config)
+        => config.DataOverrideDir is { Length: > 0 } dir ? FromDirectory(dir) : Default;
+
+    /// <summary>
+    /// M8 (knowledge roadmap item 5): read the data files from <paramref name="dir"/>, falling back to the shipped copy
+    /// for any file it does not contain, and validate the result with the same parser and graph checks as the shipped
+    /// data (ids, references, cycles, reachability). Any problem throws <see cref="InvalidDataException"/> whose message
+    /// starts with "data override &lt;dir&gt;:".
+    /// </summary>
+    public static KnowledgeData FromDirectory(string dir)
+    {
+        if (!Directory.Exists(dir)) throw new InvalidDataException($"data override {dir}: folder not found");
+        try
+        {
+            var texts = new string[Files.Length];
+            for (int i = 0; i < Files.Length; i++)
+            {
+                string path = Path.Combine(dir, Files[i]);
+                texts[i] = File.Exists(path) ? File.ReadAllText(path) : Embedded(Files[i]);
+            }
+            var parsed = Parse(texts[0], texts[1], texts[2], texts[3]);
+            var data = new KnowledgeData(parsed.Concepts, parsed.Resources, parsed.Buildings, parsed.Tools) { SetHash = parsed.SetHash, Source = dir };
+            ConceptGraph.Load(data); // throws InvalidDataException listing every graph problem
+            return data;
+        }
+        catch (Exception e) when (e is InvalidDataException or JsonException or KeyNotFoundException or InvalidOperationException
+                                       or FormatException or IOException or UnauthorizedAccessException)
+        {
+            throw new InvalidDataException($"data override {dir}: {e.Message}", e);
+        }
+    }
 
     private static string Embedded(string name)
     {
@@ -72,7 +116,12 @@ public sealed class KnowledgeData
                     c.GetProperty("difficulty").GetSingle(), effects);
                 concepts.Add(new ConceptDef(proposal, tags));
             }
-        return new KnowledgeData(concepts, resources, buildings, tools);
+        ulong h = Hash.Offset;
+        h = Hash.Mix(h, StableHash.Of(conceptsJson));
+        h = Hash.Mix(h, StableHash.Of(resourcesJson));
+        h = Hash.Mix(h, StableHash.Of(buildingsJson));
+        h = Hash.Mix(h, StableHash.Of(toolsJson));
+        return new KnowledgeData(concepts, resources, buildings, tools) { SetHash = h.ToString("X16") };
     }
 
     private static HashSet<string> Ids(string json, string file)
@@ -123,6 +172,11 @@ public sealed class ConceptNode
 
     public string Id => Concept.Id;
     public string Name => Concept.Name;
+
+    /// <summary>The name with a lower-case first letter, for memory and Chronicle text (cached: built once per node).</summary>
+    public string LowerName => _lowerName ??= Name.Length == 0 ? Name : char.ToLowerInvariant(Name[0]) + Name[1..];
+    private string? _lowerName;
+
     public float Difficulty => Concept.Difficulty;
     public string Category => Tags.Count > 0 ? Tags[0] : "misc";
 }
