@@ -211,3 +211,62 @@ with `UseBrain = false`. The main-scene test sets `UseBrain = false`.
 real calls from tests (AGENTS.md: no API calls from tests).
 **Evidence.** Headless boot prints `Eden mind: provider none`.
 **Revisit when.** Never for tests. A deployed URL changes only `BrainDefaults`.
+
+## 2026-11-06 — A1: asset packs (Kenney for everything, Quaternius dropped)
+**Decision.** Characters: Kenney "Mini Characters" 1.0 (12 rigged GLBs, 7-bone rig, idle/walk/sprint/interact/
+attack/die). Buildings: Kenney "Fantasy Town Kit" 2.0 pieces assembled per kind in `Art/BuildingFactory.cs`.
+Nature, crops, rocks: Kenney "Nature Kit" 2.1. Terrain detail: five ambientCG 1K colour maps. UI: Nunito (OFL) and
+Kenney game-icons. Colours of every pack are remapped at load to the reference palette (`Art/Palette.cs`).
+**Why.** Quaternius "Ultimate Animated Character Pack" (the spec's first choice) is only on Google Drive, and the
+Drive files answered "Quota exceeded" on 2026-11-06. Quaternius' itch.io character packs (Modular Outfits Fantasy,
+Universal Base Characters) are 13k-triangle PBR models with 4K textures: too heavy for a 700-instance mid LOD and
+not flat low-poly. Quaternius Stylized Nature MegaKit trees are 4–10k triangles with alpha cards. The Kenney packs are
+flat-coloured, 100–700 triangles, one shared colormap per pack, and read as one family after the palette remap.
+The mini characters are chibi-proportioned; that is the visible trade.
+**Evidence.** `game/assets/*/SOURCE.md`; 11 MB of assets in total.
+**Revisit when.** The Quaternius Drive quota resets or a CC0 human pack with normal proportions and glTF appears.
+
+## 2026-11-06 — A1: assets load at runtime, no Godot import
+**Decision.** `game/assets/` has a `.gdignore`. GLBs load through `GltfDocument.AppendFromFile`, images through
+`Image.LoadFromFile`, the font through `FontFile.LoadDynamicFont`. Meshes are baked at startup into one-surface
+vertex-coloured `ArrayMesh`es (`Art/MeshBaker.cs`); mid-LOD poses are CPU-skinned from the animation tracks
+(`CharacterLibrary.Pose`).
+**Why.** The gdUnit mirror project has its own `.godot/` and never runs an import, and `check.sh` boots headless on a
+fresh clone. Runtime loading works identically in both and needs no committed `.import` files. Baking to one surface
+makes every prop one draw call per MultiMesh.
+**Evidence.** `ArtPassTests.Every_building_kind_has_a_mesh_and_the_assets_load_cleanly` (no loader errors); headless
+boot clean; startup to first frame 0.96 s with the fake sim.
+**Revisit when.** Exporting a build (M8): the `.gdignore`d files must be added as non-resource export files, or the
+assets moved to imported resources.
+
+## 2026-11-06 — A1: NPC LODs and scale
+**Decision.** Hi LOD: the 50 nearest, skinned, `AnimationTree` (blend space idle/walk/sprint by speed under a
+transition move/work/fight/down), palette colours by instance uniform, elders stooped by the torso bone. Mid LOD: the
+next 700, baked poses (idle, walk A/B, work, fight, lying) of one model per sex in 12 MultiMeshes. Far LOD: the rest,
+camera-facing quads from an 8 heading × stand/lying × 2 sex impostor atlas rendered once at startup. One unit is one
+metre: adults 1.75 m, children 1.35 m, infants 1.0 m, elders 1.65 m; mid and far LODs grow to 1.6× between 60 m and
+400 m camera height, hi LOD and buildings never scale. `BuildingKind.Footprint` is a clearance radius in the sim
+(`SpotFree` keeps centres two footprints apart), so each building mesh keeps its half-extent within it.
+**Why.** Spec 45 and the user's scale note. 700 mid slots keep the 2,000-NPC frame at ~270 fps with draw calls under
+420; the mid female model is female-b because female-a carries a prop that doubles her silhouette width.
+**Evidence.** `ArtPassTests` (LOD counts, heights 1.7–1.8 m, footprints, zoom scale); STATUS A1 table.
+**Revisit when.** M8 scale work, or when mid NPCs need more than two silhouettes.
+
+## 2026-11-06 — A1: foundations and render-side flattening
+**Decision.** Buildings stand at the highest of five footprint samples on a stone plinth (earth bank for fields)
+reaching the lowest sample minus 0.35 m; `TerrainBuilder` flattens only its render copy of the heights under each
+footprint (one-cell apron half way) and paints dirt yards and roads to the settlement centre, rebuilding only the
+touched chunks. Props and NPCs sample that render ground; small props tilt up to 15°, trees sink 2–5 %.
+**Why.** User feedback (assets half-sunk); the sim's heightmap and pathing must not change.
+**Evidence.** `ArtPassTests.Buildings_on_a_30_degree_slope_stay_above_ground_and_plinths_reach_it`,
+`Terrain_flattens_only_its_render_copy_under_footprints`.
+**Revisit when.** The sim's site picker prefers flat ground (backlog row), which will shrink the terraces.
+
+## 2026-11-06 — A1: day-night pacing and performance trades
+**Decision.** The light follows `HourOfDay` fully up to 2.5 in-game hours per real second and settles on a fixed
+14:00 above 12 h/s (1× runs 2 h/s, so a day lasts 12 s and is shown; 10× and faster do not strobe). Night keeps a
+0.32 moon light and 0.55 ambient. Traded for the budgets: terrain chunks cast no shadows; 2 PSSM splits at 420 m;
+decor (grass, flowers, ferns) only within 150 m of the camera; mid NPC shadows on, far off; no SSAO/SDFGI/volumetrics.
+**Why.** A full cycle at 500× is a strobe; the budgets in spec 45.
+**Evidence.** STATUS A1 table.
+**Revisit when.** Time scales or the day length change in the sim.

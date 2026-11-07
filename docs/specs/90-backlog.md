@@ -26,16 +26,24 @@ item; remove it from here in the same PR that resolves it. Last updated 2026-11-
 | `user://data/` override for concepts and ids | M8 or later | Roadmap item 5. |
 | Knowledge UI: settlement knowledge panel, Chronicle filters, spread overlay, proficiency bars | post-M5 UI pass, M7 overlay | Roadmap item 6. Not done in M5 (the M5 UI pass covered dialogue, brain settings, budget meter, god-powers toolbar). The inspector already lists knowledge with proficiency numbers. |
 
+## Eden.Sim (from the art pass review)
+
+| Item | Belongs to | Note |
+|---|---|---|
+| Building site picker should prefer flat ground (max slope under the footprint) and flatten the sim heightmap slightly on completion | M3 owner, next Sim pass | Render-side foundations/flattening land in A1 regardless; this makes pathing and placement agree with the picture. |
+
 ## Eden.Game (from M2, `40-game-client.md`)
 
 | Item | Belongs to | Note |
 |---|---|---|
-| Trees, stone, berries not drawn | A1 art pass (`45-art-pass.md`) | `IWorldSnapshot` has no resource-node field. Add a `ResourceView` list to the contract (PR note required); Eden.Sim already has `ResourceNodes` internally. |
-| Buildings not drawn | A1 art pass | `BuildingView` exists in the contract; the sim does not emit buildings until M3. |
-| Hi-LOD NPC is a code-built capsule, no skinned glTF / `AnimationTree` | A1 art pass | Kenney/Quaternius CC0 packs as planned. Pool and slot logic are done. |
 | No per-chunk `NavigationRegion3D` baking | M6 | Only the possessed `CharacterBody3D` needs navigation; the sim never does. |
 | Settlement panel, Chronicle timeline, the other god powers (spawn, rain/drought, terraform, bless/curse, drop item) | M7 | M5 shipped the toolbar with Select / Lightning / Whisper, the brain settings panel, the budget meter and the dialogue panel. All other power commands already have sim handlers. |
-| `FakeSimHost` stays under `src/Eden.Game/Dev/` | keep | Useful for perf runs; `--fake-sim --npcs=N --log-fps --screenshot=PATH --quit-after=S` are the CLI flags. |
+| `game/assets/` is `.gdignore`d and loaded at runtime | M8 (export) | A1 loads GLB/PNG/JPG/TTF with `GltfDocument`/`Image`/`FontFile` from `res://` files (DECISIONS 2026-11-06). An exported build must ship them as non-resource files (export filter `assets/*`) or move them to imported resources. |
+| Game herds (`ResourceView` kind `game`) are not drawn | next art pass or M8 | No CC0 animal model was chosen in A1; the views are emitted and skipped by `ResourceRenderer`. |
+| Nova Roma extras not done: cartoon cumulus clouds, roads that follow the terrain, bridges, record stelae and shrine altars as own meshes | next art pass | A1 paints dirt yards and straight roads to the settlement centre and builds plinths/boats procedurally; the rest is open. |
+| One-off hitches: decor rebuild when a building completes (~65k-cell scan), impostor atlas readback at startup, first night shader variant | M8 | Visible as a single low sample in the 5,000-NPC run; averages stay within budget. |
+| Seed 20 at year 60 has ≈300 people, not the ≈1,000 spec 45 assumed | balance pass / spec 45 | Budgets were also measured at year 120 (see STATUS A1). |
+| `FakeSimHost` stays under `src/Eden.Game/Dev/` | keep | Useful for perf runs; `--fake-sim --npcs=N --log-fps --screenshot=PATH --quit-after=S` are the CLI flags; A1 added `--year=N --hour=H --focus=X,Z|town --paused --zoom=M --gallery --lineup --hide=Node,...`. |
 
 ## brain/ (from the Worker agent, `30-brain-worker.md`)
 
@@ -58,5 +66,4 @@ item; remove it from here in the same PR that resolves it. Last updated 2026-11-
 
 | Item | Belongs to | Note |
 |---|---|---|
-| `ResourceView` for trees/stone/berries in `IWorldSnapshot` | A1 art pass (pre-approved) | See Eden.Game above. |
 | Save-format version bump rules | M8 | `SaveWriter` sections are tagged and versioned; write the compatibility policy down when the first breaking change happens. |

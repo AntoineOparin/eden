@@ -16,7 +16,8 @@ public sealed class WorldSnapshot(
     IReadOnlyDictionary<int, NpcDetail>? details = null,
     int[]? slotVersions = null,
     ConcurrentQueue<int>? detailRequests = null,
-    MindExtras? mind = null) : IWorldSnapshot, IMindSnapshot
+    MindExtras? mind = null,
+    ResourceView[]? resources = null) : IWorldSnapshot, IMindSnapshot
 {
     private readonly MindExtras _mind = mind ?? MindExtras.Empty;
 
@@ -35,6 +36,7 @@ public sealed class WorldSnapshot(
     public int Population => Npcs.Length;
     public ReadOnlyMemory<NpcView> Npcs { get; } = npcs;
     public ReadOnlyMemory<BuildingView> Buildings { get; } = buildings;
+    public ReadOnlyMemory<ResourceView> Resources { get; } = resources ?? [];
     public IReadOnlyList<ChronicleEntry> NewChronicle { get; } = newChronicle;
 
     public bool TryGetNpcDetail(int npcId, out NpcDetail detail)

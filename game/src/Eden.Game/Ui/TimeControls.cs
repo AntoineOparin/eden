@@ -10,7 +10,8 @@ namespace Eden.Game;
 public partial class TimeControls : HBoxContainer
 {
     public static readonly TimeScale[] Scales = [TimeScale.Paused, TimeScale.X1, TimeScale.X10, TimeScale.X100, TimeScale.X500];
-    private static readonly string[] Labels = ["Pause", "1x", "10x", "100x", "500x"];
+    private static readonly string[] Labels = ["", "1×", "10×", "100×", "500×"];
+    private static readonly string[] IconNames = ["pause", "forward", "fast-forward", "fast-forward", "fast-forward"];
 
     private readonly Dictionary<TimeScale, Button> _buttons = new();
     private TimeScale _lastRunning = TimeScale.X1;
@@ -28,11 +29,13 @@ public partial class TimeControls : HBoxContainer
             {
                 Name = $"Speed{(int)scale}",
                 Text = Labels[i],
+                Icon = UiTheme.Icon(IconNames[i]),
+                ExpandIcon = false,
                 ToggleMode = true,
                 ButtonGroup = group,
                 FocusMode = FocusModeEnum.None,
-                CustomMinimumSize = new Vector2(52, 0),
-                TooltipText = i == 0 ? "Pause (Space)" : $"{Labels[i]} speed ({i + 1})",
+                CustomMinimumSize = new Vector2(i == 0 ? 36 : 56, 32),
+                TooltipText = i == 0 ? "Pause the world (Space)" : $"Run time at {Labels[i]} speed (key {i + 1}); Space pauses",
             };
             button.Pressed += () => Request(scale);
             AddChild(button);
@@ -68,6 +71,6 @@ public partial class TimeControls : HBoxContainer
 
     private void Show(TimeScale scale)
     {
-        if (_buttons.TryGetValue(scale, out var b)) b.SetPressedNoSignal(true);
+        foreach (var (s, b) in _buttons) b.SetPressedNoSignal(s == scale);
     }
 }

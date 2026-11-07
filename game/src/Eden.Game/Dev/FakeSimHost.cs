@@ -22,6 +22,7 @@ public sealed class FakeSimHost : ISimHost, IIntentionSink
     private readonly ConcurrentQueue<WorldCommand> _commands = new();
     private readonly NpcState[] _npcs;
     private readonly int[] _landCells;
+    private readonly ResourceView[] _resources;
     private uint _rng;
     private long _tick;
     private volatile IWorldSnapshot _latest;
@@ -54,6 +55,7 @@ public sealed class FakeSimHost : ISimHost, IIntentionSink
         if (land.Count == 0) land.Add(_heights.Length / 2 + width / 2);
         _landCells = land.ToArray();
 
+        _resources = GenerateResources(seed);
         _npcs = new NpcState[Math.Max(0, npcCount)];
         for (int i = 0; i < _npcs.Length; i++)
         {
@@ -195,7 +197,34 @@ public sealed class FakeSimHost : ISimHost, IIntentionSink
         _pendingChronicle = new List<ChronicleEntry>();
         long ticksPerDay = TicksPerHour * HoursPerDay, ticksPerYear = ticksPerDay * DaysPerYear;
         return new FakeWorldSnapshot(_tick, (int)(_tick / ticksPerYear), (int)(_tick % ticksPerYear / ticksPerDay),
-            (float)(_tick % ticksPerDay) / TicksPerHour, _info, _heights, _biomes, views, chronicle);
+            (float)(_tick % ticksPerDay) / TicksPerHour, _info, _heights, _biomes, views, chronicle, _resources);
+    }
+
+    /// <summary>
+    /// Static resource nodes, placed like the real WorldGen (trees and berries in forest and grassland, stone and ore on
+    /// mountains, a few herds), from a hash of the cell so the layout is deterministic per seed. Amounts never change.
+    /// </summary>
+    private ResourceView[] GenerateResources(int seed)
+    {
+        var list = new List<ResourceView>();
+        for (int i = 0; i < _heights.Length; i++)
+        {
+            int cx = i % _info.Width, cz = i / _info.Width;
+            float roll = IslandGenerator.Hash01(seed + 101, cx, cz);
+            string? kind = _biomes[i] switch
+            {
+                Biome.Forest => roll < 0.06f ? "tree" : roll < 0.075f ? "berry" : roll < 0.078f ? "game" : null,
+                Biome.Grassland => roll < 0.008f ? "berry" : roll < 0.014f ? "tree" : roll < 0.0165f ? "game" : null,
+                Biome.Mountain => roll < 0.04f ? "stone" : roll < 0.052f ? "ore" : null,
+                Biome.Beach => roll < 0.01f ? "tree" : null,
+                _ => null,
+            };
+            if (kind is null) continue;
+            float x = cx * _info.CellSize, z = cz * _info.CellSize;
+            float amount = 0.4f + 0.6f * IslandGenerator.Hash01(seed + 7, cx, cz);
+            list.Add(new ResourceView(list.Count, kind, x, _heights[i], z, amount, (byte)(IslandGenerator.Hash01(seed + 13, cx, cz) * 255)));
+        }
+        return list.ToArray();
     }
 
     private bool IsWalkable(int cell) => _heights[cell] > _info.SeaLevel + 1.0f && _biomes[cell] != Biome.Snow;

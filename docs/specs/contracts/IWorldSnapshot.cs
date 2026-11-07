@@ -52,6 +52,20 @@ public readonly record struct BuildingView(
     float Progress);
 
 /// <summary>
+/// A harvestable thing standing in the world, for drawing only (A1). <see cref="Kind"/> is a resource id from
+/// <c>game/data/resources.json</c>: node kinds <c>tree</c>, <c>stone</c>, <c>ore</c>, <c>berry</c>, <c>game</c>, plus
+/// <c>grain</c> for the crop on a finished farm plot. <see cref="Amount"/> is 0..1 of the node's maximum (for
+/// <c>grain</c>: crop growth, 0 fallow, 1 ripe). <see cref="Variant"/> is a stable per-node byte the renderer uses to
+/// pick a model and jitter; it carries no game meaning. Ids are stable for the lifetime of the node.
+/// </summary>
+public readonly record struct ResourceView(
+    int Id,
+    string Kind,
+    float X, float Y, float Z,
+    float Amount,
+    byte Variant);
+
+/// <summary>
 /// Static world description; fixed for the lifetime of a world (terraforming updates the heightmap).
 /// Grid layout, shared by <see cref="IWorldSnapshot.Heights"/> and <see cref="IWorldSnapshot.Biomes"/>:
 /// row-major, cell (x, z) lives at index <c>z * Width + x</c>, the map origin is world (0, 0) and
@@ -106,6 +120,9 @@ public interface IWorldSnapshot
     int Population { get; }
     ReadOnlyMemory<NpcView> Npcs { get; }
     ReadOnlyMemory<BuildingView> Buildings { get; }
+
+    /// <summary>Resource nodes and farm-plot crops, for the renderer (A1). Order is stable between snapshots.</summary>
+    ReadOnlyMemory<ResourceView> Resources { get; }
 
     /// <summary>Chronicle entries appended since the previous snapshot. Godot drains them each frame.</summary>
     IReadOnlyList<ChronicleEntry> NewChronicle { get; }

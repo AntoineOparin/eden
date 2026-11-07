@@ -33,6 +33,12 @@ get an `npc_hi` instance pooled and re-targeted; everyone else goes into a
 `MultiMeshInstance3D` (low-poly body, per-instance colour by settlement, `NpcPose` picks a
 frame). Buildings via one `MultiMesh` per kind. Target 60 fps with 2,000 NPCs.
 
+**A1 as built.** Art and LODs follow `45-art-pass.md` ("As built"): `NpcRenderer` has hi (50, skinned
+`NpcHi` + `AnimationTree`), mid (700 baked poses) and far (impostor quads) LODs; `ResourceRenderer` and
+`BuildingRenderer` draw `IWorldSnapshot.Resources` / `Buildings` through chunked MultiMeshes; `TerrainBuilder` keeps a
+render copy of the heights flattened under building foundations; `SkyCycle` drives sun, moon and sky from the hour;
+`UiTheme` is the one HUD theme. Assets load at runtime from the `.gdignore`d `game/assets/`.
+
 **God camera.** `GodCameraRig` (`Node3D` + `Camera3D`): fixed pitch ≈ 55°, WASD and screen-edge
 pan, scroll zoom 20–400 m that eases pitch between 50° and 65°, **no yaw**. Left click picks
 (`PhysicsRayQueryParameters3D` against a thin NPC collision layer or nearest `NpcView` in

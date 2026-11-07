@@ -181,8 +181,43 @@ public sealed partial class World
             Tick, clock.Year, clock.DayOfYear, clock.HourOfDay,
             new WorldInfo(Config.Seed, Config.WorldWidth, Config.WorldHeight, Config.CellSize, Config.SeaLevel, Config.ChunkSize),
             _publishedHeights ??= (float[])Terrain.Heights.Clone(), _publishedBiomes ??= (byte[])Terrain.Biomes.Clone(),
-            views, BuildingViews(), chronicle, details, versions, _detailRequests, MindExtras());
+            views, BuildingViews(), chronicle, details, versions, _detailRequests, MindExtras(), ResourceViews());
     }
+
+    /// <summary>
+    /// Resource nodes then finished farm plots (kind "grain", amount = crop growth) for the renderer. Read-only:
+    /// nothing here touches sim state or the RNG. Node ids are node indices (nodes are never removed); crop ids are
+    /// <see cref="CropViewIdBase"/> + building id.
+    /// </summary>
+    private ResourceView[] ResourceViews()
+    {
+        var r = Resources;
+        var b = Buildings;
+        int crops = 0;
+        for (int i = 0; i < b.HighWater; i++)
+            if (b.Alive[i] && b.Kind[i] == BuildingKinds.FarmPlot && b.Progress[i] >= 1f) crops++;
+        var views = new ResourceView[r.Count + crops];
+        for (int i = 0; i < r.Count; i++)
+        {
+            float x = r.X[i], z = r.Z[i];
+            float amount = r.Max[i] > 0 ? Math.Clamp(r.Amount[i] / r.Max[i], 0f, 1f) : 0f;
+            uint h = (uint)i * 2654435761u ^ (uint)Config.Seed * 40503u;
+            views[i] = new ResourceView(i, ResourceKindIds[(int)r.Kind[i]], x, Terrain.HeightAt(x, z), z, amount, (byte)(h >> 24));
+        }
+        int k = r.Count;
+        for (int i = 0; i < b.HighWater && k < views.Length; i++)
+        {
+            if (!b.Alive[i] || b.Kind[i] != BuildingKinds.FarmPlot || b.Progress[i] < 1f) continue;
+            float growth = b.Crop[i] switch { CropStage.Ripe => 1f, CropStage.Growing => Math.Clamp(b.Growth[i], 0.05f, 0.99f), _ => 0f };
+            views[k++] = new ResourceView(CropViewIdBase + i, "grain", b.X[i], Terrain.HeightAt(b.X[i], b.Z[i]), b.Z[i], growth, (byte)(i * 37));
+        }
+        return views;
+    }
+
+    /// <summary>Id offset of farm-plot crops in <see cref="IWorldSnapshot.Resources"/>.</summary>
+    public const int CropViewIdBase = 1 << 24;
+
+    private static readonly string[] ResourceKindIds = ["tree", "stone", "ore", "berry", "game"];
 
     /// <summary>Read-only extras for Eden.Mind (spotlight, prompts); see <see cref="IMindSnapshot"/>.</summary>
     private MindExtras MindExtras()

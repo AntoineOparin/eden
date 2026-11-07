@@ -1,36 +1,61 @@
+using Eden.Game.Art;
 using Eden.Sim.Contracts;
 using Godot;
 
 namespace Eden.Game;
 
 /// <summary>
-/// Draws every NPC in the snapshot. The <see cref="HiLodSlots"/> nearest NPCs to the viewer (with
-/// hysteresis so slots do not flicker at the boundary) get a pooled <see cref="NpcHi"/> instance; everyone
-/// else is one instance of a single <see cref="MultiMeshInstance3D"/> written with one buffer upload per frame.
+/// Draws every NPC in the snapshot in three LODs by camera distance:
+/// <list type="bullet">
+/// <item>hi: the <see cref="HiLodSlots"/> nearest (with hysteresis) get a pooled <see cref="NpcHi"/> (skinned character,
+/// AnimationTree);</item>
+/// <item>mid: the next <see cref="MidLodSlots"/> are static baked poses of one model per sex
+/// (<see cref="CharacterLibrary.Pose"/>) in one MultiMesh per (sex, pose); walkers alternate two walk frames;</item>
+/// <item>far: everyone else is a camera-facing quad from the <see cref="ImpostorAtlas"/> (8 headings × stand/lying).
+/// Until the atlas has rendered (and in tests without a scene tree) far NPCs use the mid idle/lying meshes.</item>
+/// </list>
 /// Positions are interpolated between the previous and the latest snapshot so 20 Hz sim output looks smooth.
 /// Allocation-free per frame once the arrays have grown to the population.
 /// </summary>
 public partial class NpcRenderer : Node3D
 {
-    private const int FloatsPerInstance = 16; // Transform3D (12) + Color (4)
+    private const int FloatsPerInstance = 16; // Transform3D (12) + custom data (4)
+    private static readonly BakedPose[] MidPoses = Enum.GetValues<BakedPose>();
 
     [Export] public PackedScene? HiScene { get; set; }
     [Export] public int HiLodSlots { get; set; } = 50;
+    /// <summary>NPCs after the hi slots drawn as baked-pose meshes; the rest are impostor quads.</summary>
+    [Export] public int MidLodSlots { get; set; } = 700;
     /// <summary>Current hi-LOD NPCs compete with their distance multiplied by this, so they keep the slot until clearly farther.</summary>
     [Export] public float Hysteresis { get; set; } = 0.85f;
-    /// <summary>Visual exaggeration so people read at god-camera distances.</summary>
-    [Export] public float NpcScale { get; set; } = 1.6f;
+    /// <summary>Scale of every NPC; 1 = true size (adult 1.75 m). Spec 45: never scaled up at close range.</summary>
+    [Export] public float NpcScale { get; set; } = 1f;
+    /// <summary>Mid and far LODs grow to this factor at <see cref="FarZoomHeight"/> camera height for god-view readability.</summary>
+    [Export] public float FarZoomScaleMax { get; set; } = 1.6f;
+    [Export] public float NearZoomHeight { get; set; } = 60f;
+    [Export] public float FarZoomHeight { get; set; } = 400f;
+
+    /// <summary>Scale applied to mid/far NPCs this frame (1 near the ground, up to <see cref="FarZoomScaleMax"/>).</summary>
+    public float ZoomScale { get; private set; } = 1f;
     [Export] public bool Interpolate { get; set; } = true;
+    [Export] public bool MidCastShadows { get; set; } = true;
 
-    private static readonly Color[] SettlementColors =
-    [
-        new(0.90f, 0.35f, 0.30f), new(0.30f, 0.55f, 0.90f), new(0.95f, 0.80f, 0.25f),
-        new(0.55f, 0.35f, 0.80f), new(0.95f, 0.55f, 0.20f), new(0.25f, 0.80f, 0.75f),
-        new(0.85f, 0.45f, 0.70f), new(0.60f, 0.75f, 0.30f),
-    ];
+    /// <summary>Height of the drawn ground; NPCs never stand below it (flattened yards, terraces). Null: sim heights only.</summary>
+    public Func<float, float, float>? Ground { get; set; }
 
-    private MultiMeshInstance3D _multiInstance = null!;
-    private MultiMesh _multiMesh = null!;
+    private sealed class Layer
+    {
+        public required MultiMeshInstance3D Node;
+        public required MultiMesh Multi;
+        public float[] Buffer = [];
+        public int Count;
+    }
+
+    private Layer[,] _mid = new Layer[2, MidPoses.Length];
+    private Layer? _far;
+    private ImpostorAtlas? _atlas;
+    private ShaderMaterial? _farMaterial;
+    private bool _farUsesAtlas;
     private MeshInstance3D _selectionRing = null!;
     private NpcHi[] _pool = [];
     private int[] _slotNpc = [];
@@ -45,32 +70,43 @@ public partial class NpcRenderer : Node3D
     private float[] _heading = [];
     private float[] _keys = [];
     private int[] _order = [];
-    private float[] _buffer = [];
+    private byte[] _lod = [];
 
     public int HiLodCount => _slotByNpc.Count;
-    public int LowLodCount { get; private set; }
+    /// <summary>NPCs not in a hi slot (mid + far), as before A1.</summary>
+    public int LowLodCount => MidLodCount + FarLodCount;
+    public int MidLodCount { get; private set; }
+    public int FarLodCount { get; private set; }
     public int SelectedId { get; set; } = -1;
     public IReadOnlyCollection<int> HiLodNpcIds => _slotByNpc.Keys;
     public int RenderedCount { get; private set; }
+    public bool AtlasReady => _atlas?.IsReady == true;
 
     public override void _Ready() => Initialise();
 
-    /// <summary>Creates the MultiMesh and the hi-LOD pool. Idempotent; tests may call it without a scene tree.</summary>
+    /// <summary>Creates the MultiMeshes and the hi-LOD pool. Idempotent; tests may call it without a scene tree.</summary>
     public void Initialise()
     {
         if (_initialised) return;
         _initialised = true;
 
-        var bodyMesh = new CapsuleMesh { Radius = 0.3f, Height = 1.7f, RadialSegments = 6, Rings = 1 };
-        bodyMesh.Material = new StandardMaterial3D { VertexColorUseAsAlbedo = true, VertexColorIsSrgb = true, Roughness = 0.85f };
-        _multiMesh = new MultiMesh
+        var everywhere = new Aabb(new Vector3(-4096, -512, -4096), new Vector3(8192, 1024, 8192));
+        for (int s = 0; s < 2; s++)
         {
-            TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
-            UseColors = true,
-            Mesh = bodyMesh,
-        };
-        _multiInstance = new MultiMeshInstance3D { Name = "LowLod", Multimesh = _multiMesh };
-        AddChild(_multiInstance);
+            var model = CharacterLibrary.MidModel(s == 0 ? Sex.Female : Sex.Male);
+            var material = CharacterLibrary.MidMaterial(model);
+            for (int p = 0; p < MidPoses.Length; p++)
+            {
+                var mesh = CharacterLibrary.Pose(model, MidPoses[p]) ?? (Mesh)new CapsuleMesh { Radius = 0.3f, Height = 1.7f };
+                _mid[s, p] = NewLayer($"Mid_{(s == 0 ? "F" : "M")}_{MidPoses[p]}", mesh, material, everywhere,
+                    MidCastShadows ? GeometryInstance3D.ShadowCastingSetting.On : GeometryInstance3D.ShadowCastingSetting.Off);
+            }
+        }
+
+        _farMaterial = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/npc_far.gdshader") };
+        _farMaterial.SetShaderParameter("atlas_grid", new Vector2(ImpostorAtlas.Columns, ImpostorAtlas.Rows));
+        var quad = new QuadMesh { Size = new Vector2(2.4f, 2.4f) };
+        _far = NewLayer("Far", quad, _farMaterial, everywhere, GeometryInstance3D.ShadowCastingSetting.Off);
 
         var ring = new TorusMesh { InnerRadius = 0.9f, OuterRadius = 1.15f, Rings = 24, RingSegments = 8 };
         ring.Material = new StandardMaterial3D
@@ -95,12 +131,37 @@ public partial class NpcRenderer : Node3D
             _slotNpc[s] = -1;
             _freeSlots.Push(s);
         }
+
+        if (IsInsideTree() && DisplayServer.GetName() != "headless")
+        {
+            _atlas = new ImpostorAtlas { Name = "ImpostorAtlas" };
+            AddChild(_atlas);
+        }
+    }
+
+    private Layer NewLayer(string name, Mesh mesh, Material material, Aabb aabb, GeometryInstance3D.ShadowCastingSetting shadows)
+    {
+        var multi = new MultiMesh
+        {
+            TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
+            UseCustomData = true,
+            Mesh = mesh,
+            CustomAabb = aabb, // NPCs roam the whole map; skip per-upload AABB recomputation
+        };
+        var node = new MultiMeshInstance3D { Name = name, Multimesh = multi, MaterialOverride = material, CastShadow = shadows };
+        AddChild(node);
+        return new Layer { Node = node, Multi = multi };
     }
 
     /// <summary>Call once per frame with the snapshot Main read this frame and the camera position.</summary>
     public void Render(IWorldSnapshot snapshot, Vector3 viewer, double nowSeconds)
     {
         Initialise();
+        if (!_farUsesAtlas && _atlas?.Texture is { } atlasTexture)
+        {
+            _farMaterial!.SetShaderParameter("atlas", atlasTexture);
+            _farUsesAtlas = true;
+        }
         if (!ReferenceEquals(snapshot, _current))
         {
             _previous = _current;
@@ -112,6 +173,8 @@ public partial class NpcRenderer : Node3D
         var npcs = snapshot.Npcs.Span;
         int n = npcs.Length;
         EnsureCapacity(n);
+        float cameraHeight = viewer.Y - (Ground?.Invoke(viewer.X, viewer.Z) ?? 0f);
+        ZoomScale = 1f + (FarZoomScaleMax - 1f) * Mathf.SmoothStep(NearZoomHeight, FarZoomHeight, cameraHeight);
 
         // Interpolate between the previous and current snapshot when both list the same NPC at the same index.
         ReadOnlySpan<NpcView> prev = default;
@@ -132,18 +195,23 @@ public partial class NpcRenderer : Node3D
                 p = new Vector3(o.X, o.Y, o.Z).Lerp(p, alpha);
                 h = Mathf.LerpAngle(o.Heading, h, alpha);
             }
+            if (Ground is not null) p.Y = MathF.Max(p.Y, Ground(p.X, p.Z));
             _pos[i] = p;
             _heading[i] = h;
             float d2 = p.DistanceSquaredTo(viewer);
             _keys[i] = _slotByNpc.ContainsKey(v.Id) ? d2 * Hysteresis * Hysteresis : d2;
             _order[i] = i;
+            _lod[i] = 2; // far unless picked below
         }
 
-        // Pick the K nearest (by hysteresis-weighted distance).
+        // The hi + mid nearest (by hysteresis-weighted distance), then the hi nearest among those.
         int k = Math.Min(_pool.Length, n);
-        if (k > 0 && k < n) SelectSmallest(_order, _keys, n, k);
+        int km = Math.Min(n, k + Math.Max(0, MidLodSlots));
+        if (km > 0 && km < n) SelectSmallest(_order, _keys, n, km);
+        if (k > 0 && k < km) SelectSmallest(_order, _keys, km, k);
         _wantHi.Clear();
         for (int j = 0; j < k; j++) _wantHi.Add(npcs[_order[j]].Id);
+        for (int j = k; j < km; j++) _lod[_order[j]] = 1;
 
         for (int s = 0; s < _pool.Length; s++)
         {
@@ -162,14 +230,16 @@ public partial class NpcRenderer : Node3D
             _slotByNpc[id] = s;
         }
 
-        // Write everyone: hi-LOD nodes or MultiMesh instances.
-        int low = 0;
+        foreach (var layer in _mid) layer.Count = 0;
+        _far!.Count = 0;
+        int mid = 0, far = 0;
         bool selectedFound = false;
         for (int i = 0; i < n; i++)
         {
             ref readonly var v = ref npcs[i];
             float scale = NpcScale * StageScale(v.Stage);
-            var color = ColorFor(v);
+            float state = v.Pose == NpcPose.Dead ? 1f : v.IsThinking ? -1f : 0f;
+            var palette = CharacterLibrary.PaletteParams(v.Id, v.SettlementId, state);
             if (v.Id == SelectedId)
             {
                 selectedFound = true;
@@ -178,21 +248,49 @@ public partial class NpcRenderer : Node3D
             }
             if (_slotByNpc.TryGetValue(v.Id, out int slot))
             {
-                _pool[slot].Apply(v, _pos[i], _heading[i], color, scale, nowSeconds);
+                _pool[slot].Apply(v, _pos[i], _heading[i], palette, scale, nowSeconds);
                 continue;
             }
-            WriteInstance(low++, v, _pos[i], _heading[i], color, scale);
+            scale *= ZoomScale;
+            int sex = v.Sex == Sex.Male ? 1 : 0;
+            if (_lod[i] == 1 || !_farUsesAtlas)
+            {
+                var pose = MidPose(v, nowSeconds);
+                Write(_mid[sex, (int)pose], _pos[i], _heading[i], scale, palette);
+                if (_lod[i] == 1) mid++;
+                else far++;
+            }
+            else
+            {
+                bool lying = v.Pose is NpcPose.Sleeping or NpcPose.Dead;
+                // Heading 0 faces +Z (toward the camera); the atlas column c shows the model turned by c/8 of a turn.
+                int heading8 = ((int)MathF.Round(_heading[i] / (MathF.Tau / 8f)) % 8 + 8) % 8;
+                var tint = Palette.SettlementColor(v.SettlementId).SrgbToLinear();
+                if (v.Pose == NpcPose.Dead) tint = new Color(0.45f, 0.45f, 0.45f);
+                tint.A = ImpostorAtlas.Cell(v.Sex, lying, heading8);
+                WriteBillboard(_far, _pos[i] + new Vector3(0, (lying ? 0.35f : 0.95f) * scale, 0), scale, tint);
+                far++;
+            }
         }
         _selectionRing.Visible = selectedFound;
 
-        LowLodCount = low;
+        foreach (var layer in _mid) Upload(layer);
+        Upload(_far);
+        MidLodCount = mid;
+        FarLodCount = far;
         RenderedCount = n;
-        _multiMesh.VisibleInstanceCount = low;
-        if (_multiMesh.InstanceCount > 0)
-            RenderingServer.MultimeshSetBuffer(_multiMesh.GetRid(), _buffer);
     }
 
-    /// <summary>Screen-space pick over every NPC (hi and MultiMesh alike). Returns the NPC id or -1.</summary>
+    private static BakedPose MidPose(in NpcView v, double now) => v.Pose switch
+    {
+        NpcPose.Walking => ((long)(now * 5.0 + (v.Id & 0xFF) * 0.37) & 1) == 0 ? BakedPose.WalkA : BakedPose.WalkB,
+        NpcPose.Working => BakedPose.Work,
+        NpcPose.Fighting => BakedPose.Fight,
+        NpcPose.Sleeping or NpcPose.Dead => BakedPose.Lying,
+        _ => BakedPose.Idle,
+    };
+
+    /// <summary>Screen-space pick over every NPC (all LODs). Returns the NPC id or -1.</summary>
     public int Pick(Camera3D camera, Vector2 screenPosition, float maxPixels = 28f)
     {
         if (_current is null) return -1;
@@ -216,60 +314,55 @@ public partial class NpcRenderer : Node3D
 
     private void EnsureCapacity(int n)
     {
-        if (_pos.Length < n)
-        {
-            int cap = Math.Max(n, _pos.Length * 2);
-            _pos = new Vector3[cap];
-            _heading = new float[cap];
-            _keys = new float[cap];
-            _order = new int[cap];
-        }
-        if (_multiMesh.InstanceCount < n)
-        {
-            int cap = Math.Max(n, _multiMesh.InstanceCount * 2);
-            _multiMesh.InstanceCount = cap; // resizing clears the buffer, which we rewrite below
-            _buffer = new float[cap * FloatsPerInstance];
-        }
+        if (_pos.Length >= n) return;
+        int cap = Math.Max(n, _pos.Length * 2);
+        _pos = new Vector3[cap];
+        _heading = new float[cap];
+        _keys = new float[cap];
+        _order = new int[cap];
+        _lod = new byte[cap];
     }
 
-    private void WriteInstance(int index, in NpcView v, Vector3 pos, float heading, Color color, float scale)
+    private static void Write(Layer layer, Vector3 pos, float heading, float scale, Color custom)
     {
-        var basis = new Basis(Vector3.Up, heading);
-        Vector3 origin;
-        if (v.Pose is NpcPose.Sleeping or NpcPose.Dead)
-        {
-            basis *= new Basis(Vector3.Right, MathF.PI * 0.5f);
-            origin = pos + new Vector3(0, 0.3f * scale, 0);
-        }
-        else
-        {
-            origin = pos + new Vector3(0, 0.85f * scale, 0);
-        }
-        basis = basis.Scaled(new Vector3(scale, scale, scale));
-        int o = index * FloatsPerInstance;
-        var b = _buffer;
+        var basis = new Basis(Vector3.Up, heading).Scaled(new Vector3(scale, scale, scale));
+        Put(layer, basis, pos, custom);
+    }
+
+    private static void WriteBillboard(Layer layer, Vector3 centre, float scale, Color custom)
+        => Put(layer, Basis.FromScale(new Vector3(scale, scale, scale)), centre, custom);
+
+    private static void Put(Layer layer, in Basis basis, Vector3 origin, Color c)
+    {
+        if ((layer.Count + 1) * FloatsPerInstance > layer.Buffer.Length)
+            Array.Resize(ref layer.Buffer, Math.Max(64 * FloatsPerInstance, layer.Buffer.Length * 2));
+        int o = layer.Count * FloatsPerInstance;
+        var b = layer.Buffer;
         b[o + 0] = basis.X.X; b[o + 1] = basis.Y.X; b[o + 2] = basis.Z.X; b[o + 3] = origin.X;
         b[o + 4] = basis.X.Y; b[o + 5] = basis.Y.Y; b[o + 6] = basis.Z.Y; b[o + 7] = origin.Y;
         b[o + 8] = basis.X.Z; b[o + 9] = basis.Y.Z; b[o + 10] = basis.Z.Z; b[o + 11] = origin.Z;
-        b[o + 12] = color.R; b[o + 13] = color.G; b[o + 14] = color.B; b[o + 15] = color.A;
+        b[o + 12] = c.R; b[o + 13] = c.G; b[o + 14] = c.B; b[o + 15] = c.A;
+        layer.Count++;
     }
 
-    private static float StageScale(LifeStage stage) => stage switch
+    /// <summary>One buffer upload per layer; capacity only grows, the visible count trims the rest.</summary>
+    private static void Upload(Layer layer)
     {
-        LifeStage.Infant => 0.45f,
-        LifeStage.Child => 0.65f,
-        LifeStage.Elder => 0.95f,
+        int capacity = layer.Buffer.Length / FloatsPerInstance;
+        if (layer.Multi.InstanceCount != capacity) layer.Multi.InstanceCount = capacity;
+        layer.Multi.VisibleInstanceCount = layer.Count;
+        layer.Node.Visible = layer.Count > 0;
+        if (capacity > 0 && layer.Count > 0) RenderingServer.MultimeshSetBuffer(layer.Multi.GetRid(), layer.Buffer);
+    }
+
+    /// <summary>Spec 45 heights over the 1.75 m adult: infants 1.0 m, children 1.35 m, elders 1.65 m (and stooped in hi-LOD).</summary>
+    public static float StageScale(LifeStage stage) => stage switch
+    {
+        LifeStage.Infant => 1.0f / 1.75f,
+        LifeStage.Child => 1.35f / 1.75f,
+        LifeStage.Elder => 1.65f / 1.75f,
         _ => 1f,
     };
-
-    private static Color ColorFor(in NpcView v)
-    {
-        if (v.Pose == NpcPose.Dead) return new Color(0.35f, 0.35f, 0.35f);
-        var c = SettlementColors[(int)((uint)v.SettlementId % SettlementColors.Length)];
-        if (v.IsThinking) c = c.Lightened(0.35f);
-        if (v.Stage == LifeStage.Elder) c = c.Lerp(new Color(0.8f, 0.8f, 0.8f), 0.35f);
-        return c;
-    }
 
     /// <summary>Partial quickselect: afterwards order[0..k) hold the k smallest keys (unordered).</summary>
     private static void SelectSmallest(int[] order, float[] keys, int n, int k)
