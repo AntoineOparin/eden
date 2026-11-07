@@ -20,13 +20,13 @@ host the UI. The main thread renders and sends commands; it never mutates sim st
 
 **Scenes.** `scenes/main.tscn` (root `Main`), `scenes/world/terrain.tscn`,
 `scenes/world/water.tscn`, `scenes/npc/npc_hi.tscn` (skinned glTF + `AnimationTree`),
-`scenes/cameras/god_rig.tscn`, `scenes/cameras/possess_rig.tscn`, `scenes/ui/hud.tscn`,
+`scenes/cameras/god_rig.tscn`, `scenes/cameras/possess_rig.tscn`, `scenes/possession/possession_hud.tscn`, `scenes/ui/hud.tscn`,
 `scenes/ui/inspector.tscn`, `scenes/ui/chronicle.tscn`, `scenes/ui/brain_settings.tscn`.
 
 **Terrain.** `TerrainBuilder`: snapshot `Heights`/`Biomes` → one `ArrayMesh` per 32×32 chunk
 with normals and a biome splat (`shaders/terrain.gdshader`, 4-way blend by biome id in a
-vertex colour); water as a plane at `SeaLevel` with a simple scrolling-normal shader; chunk
-`NavigationRegion3D` baked at generation, rebaked locally on `TerraformCommand`/building change.
+vertex colour); water as a plane at `SeaLevel` with a simple scrolling-normal shader. No navigation
+baking (M6): the sim decides where NPCs walk; only the possessed body has collision (`TerrainCollision`).
 
 **NPC rendering / LOD.** `NpcRenderer`: the ≤ 50 nearest NPCs (by camera distance, hysteresis)
 get an `npc_hi` instance pooled and re-targeted; everyone else goes into a
@@ -49,6 +49,31 @@ screen space for MultiMesh ones), right-drag applies the selected power.
 turns input into `PossessedMoveCommand` each physics frame; E interacts (`PossessedInteractCommand`
 talk/give/work) with the nearest entity; Escape → `ReleasePossessionCommand`. Needs still
 tick; nearby NPCs' reactions come from the sim.
+
+**M6 as built.** `Main` adds one `PossessionDirector` node ("Possession", `src/Eden.Game/Possession/`) that owns:
+- `PossessRig` (`scenes/cameras/possess_rig.tscn`): Yaw → Pitch → `SpringArm3D` (4.2 m, shoulder offset, terrain
+  layer) → End, plus a top-level `Camera3D` that glides 0.7 s from the god camera on entry (the god rig glides back on
+  release). F = first person (arm 0 at eye height, body model hidden). Mouse look while the mouse is captured.
+- `PossessedController` (`CharacterBody3D`, capsule, its own `NpcHi` from `npc_hi.tscn`; `NpcRenderer.PossessedId`
+  keeps the NPC out of every LOD). Prediction and authority: the body moves at once at `World.PossessedSpeed` ×
+  `PossessionTicksPerRealSecond`; every physics frame (while moving, once on stopping) it sends a
+  `PossessedMoveCommand` whose vector is the sim→body gap in units of one tick's step, so the sim lands on the body;
+  idle, the body follows the interpolated sim position; a refused step pulls it back (DECISIONS 2026-11-06).
+- `TerrainCollision` (`World/`): trimesh per chunk for the 3×3 chunks around the body, layer 10, render heights; no
+  navigation baking anywhere.
+- `PossessionHud` (`scenes/possession/possession_hud.tscn`): god view "Possess <name> (P)" button for the selection;
+  possessed: name, needs bars, Walking/Running/Working/Standing, the E/G/R prompt, controls, first-person crosshair,
+  notices. `Hud.SetPossessed(bool)` hides every god panel except the dialogue (and raises `PossessedChanged`).
+- `DialoguePanel.ShowPossessed(npc, name, speakerId, speakerName)` sends through `MindPool.AskAsPossessedAsync`
+  (speaker `possessed`); the line is a `SayIntention` from the possessed NPC.
+- While possessed the god rig follows the body with its camera mirroring the possession camera, so Main's LOD viewer
+  and the Mind focus need no other change; god input is off; time runs at 1× and walking pace (2 ticks/s).
+- Keys: P possess (or M7's inspector button), WASD, Shift, mouse, F, E talk (or, with nobody in reach, pick berries /
+  take food from the own storehouse / help build), T the same thing work when people stand around, G give food,
+  R work alongside, Space pause, Esc close dialogue or release. The NPC falls back to god view if the sim never confirms (fake sim), the
+  NPC dies, or a load ends the possession.
+- Dev flags: `--save-world=PATH`, `--load-world=PATH`, `--possess=ID`, `--m6-check` (`PossessionCheck`: scripted
+  acceptance run with `--m6-message`, `--m6-shots=DIR`, `--m6-timeout`, `--m6-thinkers`).
 
 **God powers v1.** Toolbar: spawn human/animal/plant, lightning, rain/drought, raise/lower
 terrain, bless/curse, drop item, whisper (opens a one-line prompt → `WhisperCommand`). Each is

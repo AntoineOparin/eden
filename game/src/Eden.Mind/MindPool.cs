@@ -466,7 +466,19 @@ public sealed class MindPool : IDisposable
     /// the reply is spoken aloud (<see cref="SayIntention"/>, neighbours hear it) and the NPC's own memory of the
     /// exchange becomes a belief of importance ≥ 6, which the sim's gossip spreads.
     /// </summary>
-    public async Task<DialogueReply> AskAsync(int npcId, string message, CancellationToken ct = default)
+    public Task<DialogueReply> AskAsync(int npcId, string message, CancellationToken ct = default)
+        => AskCoreAsync(npcId, message, Speaker.God, PromptContext.GodName, -1, ct);
+
+    /// <summary>
+    /// M6: the player, possessing <paramref name="possessedId"/>, talks to <paramref name="npcId"/> face to face. Same
+    /// priority and retrieval as <see cref="AskAsync(int, string, CancellationToken)"/>, but the request's speaker is
+    /// <see cref="Speaker.Possessed"/> named after the possessed NPC, and the line is spoken aloud by that NPC
+    /// (<see cref="SayIntention"/>: the listener and bystanders remember it) instead of arriving as a voice from the sky.
+    /// </summary>
+    public Task<DialogueReply> AskAsPossessedAsync(int npcId, int possessedId, string possessedName, string message, CancellationToken ct = default)
+        => AskCoreAsync(npcId, message, Speaker.Possessed, possessedName, possessedId, ct);
+
+    private async Task<DialogueReply> AskCoreAsync(int npcId, string message, Speaker speaker, string speakerName, int speakerId, CancellationToken ct)
     {
         message = (message ?? "").Trim();
         if (message.Length == 0) throw new ArgumentException("empty message", nameof(message));
@@ -478,12 +490,12 @@ public sealed class MindPool : IDisposable
         {
             if (provider is NullBrainProvider)
             {
-                Heard(npcId, message);
+                Heard(npcId, message, speaker, speakerId);
                 throw new BrainException(BrainFailure.Unsupported, "no brain provider: the NPC hears you but cannot answer");
             }
             if (Budget.NeuronsToday >= _settings.DailyNeuronBudget)
             {
-                Heard(npcId, message);
+                Heard(npcId, message, speaker, speakerId);
                 throw new BrainException(BrainFailure.Budget, "today's Neuron budget is spent");
             }
 
@@ -503,27 +515,27 @@ public sealed class MindPool : IDisposable
                 var history = History(npcId);
                 if (history.Count > 20) history = history.Skip(history.Count - 20).ToArray();
                 var request = new ChatRequest(PromptContext.Npc(d, view, snap), Lines(memories, snap), PromptContext.WorldRules,
-                    Speaker.God, PromptContext.GodName, history, message);
+                    speaker, speakerName, history, message);
                 result = await provider.ChatAsync(request, cts.Token);
             }
             catch (BrainException e)
             {
                 Failed(MindTaskKind.Dialogue, npcId, e);
-                Heard(npcId, message);
+                Heard(npcId, message, speaker, speakerId);
                 throw;
             }
             catch (OperationCanceledException) when (!ct.IsCancellationRequested)
             {
                 var e = new BrainException(BrainFailure.Network, $"no answer within {_o.TaskTimeout.TotalSeconds:0} s");
                 Failed(MindTaskKind.Dialogue, npcId, e);
-                Heard(npcId, message);
+                Heard(npcId, message, speaker, speakerId);
                 throw e;
             }
             Book(result.Usage);
             Succeeded();
 
             var mapped = IntentionMapper.FromChat(result.Response, npcId, snap.Tick);
-            Heard(npcId, message);
+            Heard(npcId, message, speaker, speakerId);
             if (mapped.Rejected is { } why)
             {
                 Log($"dialogue {npcId} rejected: {why}");
@@ -541,10 +553,17 @@ public sealed class MindPool : IDisposable
     }
 
     /// <summary>The god's line reaches the NPC whatever the provider does: a whisper memory plus the history turn.</summary>
-    private void Heard(int npcId, string message)
+    private void Heard(int npcId, string message, Speaker speaker = Speaker.God, int speakerId = -1)
     {
-        _host.Enqueue(new WhisperCommand(npcId, message));
-        AddTurn(npcId, new ChatTurn(Speaker.God, message));
+        if (speaker == Speaker.Possessed && speakerId >= 0)
+        {
+            // M6: a person said it, out loud, next to the listener (truncated to the sim's speech limit).
+            string said = message.Length > 280 ? message[..280] : message;
+            if (!_host.Intentions.TryPush(new SayIntention(speakerId, _host.Latest.Tick, IntentionSource.Player, said, npcId)))
+                Log($"possessed speech from {speakerId} refused by the sim queue");
+        }
+        else _host.Enqueue(new WhisperCommand(npcId, message));
+        AddTurn(npcId, new ChatTurn(speaker, message));
     }
 
     private void AddTurn(int npcId, ChatTurn turn)

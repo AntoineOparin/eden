@@ -299,6 +299,23 @@ public sealed record SimConfig
     /// <summary>A religious settlement plans a shrine once it has this many members (and a finished storehouse, and is not hungry).</summary>
     public int ShrineMinMembers { get; init; } = 20;
 
+    // ---- M6 possession ------------------------------------------------------------------------
+
+    /// <summary>
+    /// Real-time tick rate at 1× while an NPC is possessed (instead of <see cref="TicksPerRealSecond"/>), so the world
+    /// runs at walking pace around the player: 2 ticks/s = an in-game hour in 5 s, a day in 2 minutes.
+    /// </summary>
+    public int PossessionTicksPerRealSecond { get; init; } = 2;
+
+    /// <summary>Possessed walking speed in metres per tick (2 m/s at the possession tick rate), before the stage factor.</summary>
+    public float PossessedWalkSpeed { get; init; } = 1f;
+
+    /// <summary>Sprint multiplier for the possessed NPC (Shift).</summary>
+    public float PossessedSprintFactor { get; init; } = 2.2f;
+
+    /// <summary>"Work alongside" keeps the possessed NPC on the joined job for this many ticks (or until it moves).</summary>
+    public int PossessedWorkTicks { get; init; } = 24;
+
     public int TicksPerDay => TicksPerHour * HoursPerDay;
     public int TicksPerYear => TicksPerDay * DaysPerYear;
 }

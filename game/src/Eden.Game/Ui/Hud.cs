@@ -89,4 +89,53 @@ public partial class Hud : CanvasLayer
     // ---- M7 UI pass: everything it added lives under the one "GodUi" node (myth bar, settlement panel, Chronicle).
     // Hiding that node hides all of it (for possession). Built and driven by GodUi itself; Main wires it in Main.M7.cs.
     public GodUi? God => GetNodeOrNull<GodUi>("GodUi");
+
+    // ---- M6 possession (PossessionDirector) ------------------------------------------------------
+
+    private readonly List<CanvasItem> _hiddenForPossession = new();
+
+    /// <summary>True while the player possesses an NPC (god panels hidden).</summary>
+    public bool IsPossessed { get; private set; }
+
+    /// <summary>Raised by <see cref="SetPossessed"/>; panels built elsewhere can hide or show themselves on it.</summary>
+    public event Action<bool>? PossessedChanged;
+
+    /// <summary>
+    /// M6: hides every god panel (top bar, powers, mind bar, inspector, brain settings, and any panel added to the HUD
+    /// later) while possessed, and restores exactly the ones it hid. The dialogue panel stays: the possessed NPC talks
+    /// through it.
+    /// </summary>
+    public void SetPossessed(bool possessed)
+    {
+        if (possessed == IsPossessed) return;
+        IsPossessed = possessed;
+        if (possessed)
+        {
+            _hiddenForPossession.Clear();
+            // M7's GodUi (myth bar, settlement panel, Chronicle) hides as one node.
+            if (God is { Visible: true } god)
+            {
+                god.Visible = false;
+                _hiddenForPossession.Add(god);
+            }
+            foreach (var child in GetChildren())
+            {
+                // Plain Node containers: hide their visible CanvasItem children instead.
+                Node[] items = child is CanvasItem ? [child] : [.. child.GetChildren()];
+                foreach (var node in items)
+                {
+                    if (node is not CanvasItem { Visible: true } item || ReferenceEquals(item, Dialogue)) continue;
+                    item.Visible = false;
+                    _hiddenForPossession.Add(item);
+                }
+            }
+        }
+        else
+        {
+            foreach (var item in _hiddenForPossession)
+                if (IsInstanceValid(item)) item.Visible = true;
+            _hiddenForPossession.Clear();
+        }
+        PossessedChanged?.Invoke(possessed);
+    }
 }

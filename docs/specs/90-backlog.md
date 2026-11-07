@@ -2,8 +2,8 @@
 
 Items that an earlier milestone left out on purpose, decided differently from the plan, or
 flagged as a question. Each line says where it belongs. Whoever executes that milestone owns the
-item; remove it from here in the same PR that resolves it. Last updated 2026-11-06 by the M7 UI
-pass.
+item; remove it from here in the same PR that resolves it. Last updated 2026-11-07 by the M7 UI
+and M6 merges.
 
 ## Eden.Sim (from M1, `10-sim-core.md`)
 
@@ -35,7 +35,9 @@ pass.
 
 | Item | Belongs to | Note |
 |---|---|---|
-| No per-chunk `NavigationRegion3D` baking | M6 | Only the possessed `CharacterBody3D` needs navigation; the sim never does. |
+| Buildings, trees and other people do not block the possessed body | next possession pass | M6 resolved the nav-baking row without navigation: the sim decides where bodies walk and `TerrainCollision` adds a trimesh for the 3×3 chunks around the possessed body only (DECISIONS 2026-11-06). Add building/tree shapes on layer 10 near the player if walking through houses bothers. |
+| `FakeSimHost` ignores possession commands | keep unless needed | The director falls back to god view after 3 s ("The world did not let you in"); possession needs the real sim. |
+| More possessed verbs (trade, court, eat on demand) | when wanted | M6 kept the contract's talk/give/work; the body eats and drinks on its own when desperate. |
 | `game/assets/` is `.gdignore`d and loaded at runtime | M8 (export) | A1 loads GLB/PNG/JPG/TTF with `GltfDocument`/`Image`/`FontFile` from `res://` files (DECISIONS 2026-11-06). An exported build must ship them as non-resource files (export filter `assets/*`) or move them to imported resources. |
 | Game herds (`ResourceView` kind `game`) are not drawn | next art pass or M8 | No CC0 animal model was chosen in A1; the views are emitted and skipped by `ResourceRenderer`. |
 | Nova Roma extras not done: cartoon cumulus clouds, roads that follow the terrain, bridges, record stelae and shrine altars as own meshes | next art pass | A1 paints dirt yards and straight roads to the settlement centre and builds plinths/boats procedurally; the rest is open. |

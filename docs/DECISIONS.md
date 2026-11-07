@@ -454,3 +454,67 @@ would also tint buildings and NPCs; the brief asks for cheap local visuals.
 **Evidence.** `MythUiTests.Toolbar_glyphs_are_drawn_for_every_m7_icon`; 2,000 fake NPCs with overlay, Chronicle and
 settlement panel open: 199 fps average (display-capped at 200), scripts 1.3 ms per frame.
 **Revisit when.** Someone fetches the Kenney packs by hand and prefers them, or the overlay needs real territory shapes.
+## 2026-11-06 — M6: the world runs at walking pace while possessed
+**Decision.** While an NPC is possessed, `SimHost` ticks at `SimConfig.PossessionTicksPerRealSecond` (2) instead of
+`TicksPerRealSecond` (20) at 1×: an in-game hour takes 5 s, a day 2 minutes. The possessed NPC walks
+`PossessedWalkSpeed` = 1 m/tick (2 m/s), sprints ×2.2 (4.4 m/s), children ×0.7, elders ×0.8; genes and terrain cost
+do not change it (`World.PossessedSpeed`, shared with the client's prediction). Possessing sets the time controls to
+1× and releasing restores the previous speed; Space still pauses.
+**Why.** At 20 ticks/s ordinary NPCs move 40 m/s and needs run out in seconds (water 0.9/day = empty in 13 s, dead
+24 s later), so a walk to the next village would kill the body and the neighbours would blur past. At 2 ticks/s the
+others walk 3–5 m/s, a talk lasts 3 s and the body lasts several minutes without help. Same ticks, same rules: only
+the real-time rate changes, so determinism and saves are untouched.
+**Evidence.** `PossessionTests` (sim), `Possess_walk_and_release_through_the_main_scene` (gdUnit); STATUS M6.
+**Revisit when.** Possession needs a different feel (a config value), or M8 retunes the tick rate.
+
+## 2026-11-06 — M6: prediction by command magnitude, the sim stays the authority
+**Decision.** The client moves its `CharacterBody3D` at once from WASD at the sim's possessed speed, and each physics
+frame sends `PossessedMoveCommand` with the vector from the snapshot position to the body measured in one tick's
+step (length clamped to 1, `Sprint` set when the gap exceeds a walking step). The sim moves its NPC by
+`speed × min(1, length)` toward the body, so it lands exactly on the body's position instead of overshooting, and
+stops when the body stops. With no input the body follows the sim, interpolated between snapshots like the
+renderer (this is also how "work alongside" moves it). The sim is the authority: if it refuses a step (deep water,
+the map edge) the gap grows past one tick of lead (3.2 m, ×2.2 sprinting) and the body is pulled back; beyond 10 m it
+snaps; the client also stops at water deeper than 0.9 m so this rarely shows. Commands go out every frame while
+moving and once on stopping.
+**Why.** Snapshots arrive at 2 Hz while possessed; drawing the sim position directly is a 2 Hz stutter, and plain
+prediction plus correction leaves a 1–2 m slide-back after every stop because the sim moves in whole ticks. Using
+the command's length keeps the contract unchanged (`DirX`, `DirZ`, `Sprint`).
+**Evidence.** gdUnit test: after 1.5 s of walking and a stop the sim is within 1 m of the body; STATUS M6 (gap and
+correction counts from the scripted walk).
+**Revisit when.** Networked play, or the sim gains obstacles the client cannot predict (walls, crowds).
+
+## 2026-11-06 — M6: terrain collision around the body instead of navigation baking
+**Decision.** No `NavigationRegion3D` anywhere. `TerrainCollision` builds one `ConcavePolygonShape3D` per terrain chunk
+for the 3×3 chunks (192 m square) around the possessed body from the render heights (foundation-flattened, not clamped
+to sea level), on its own physics layer 10; shapes are rebuilt only when the body changes chunk or the render heights
+change, and dropped on release. The possession camera's `SpringArm3D` uses the same layer. A trimesh rather than
+`HeightMapShape3D` because the grid has 2 m cells (a height map would need a scaled shape node) and the trimesh
+matches the drawn triangles exactly. The body moves horizontally without collision (the terrain is a height field
+with no overhangs, and the sim already decides where a body may stand) and, while grounded, follows the drawn ground;
+over a drop of more than 1.2 m it falls, and the capsule with `MoveAndSlide` against the trimesh carries it until it
+lands. Backface collision is off so a body that ends up a few centimetres under the trimesh pops out. The first
+version slid the capsule horizontally: it snagged on the render terraces under buildings and on banks the sim walks
+over, and depenetration pushed it back every frame (scripted walks stalled), so it was changed.
+**Why.** Only the possessed body needs physics; the sim decides where everyone walks, so navigation meshes would be
+unused, and the god view keeps zero physics cost (A1 budgets).
+**Evidence.** `PossessionTests.Terrain_collision_covers_only_the_chunks_around_the_body`; STATUS M6 fps.
+**Revisit when.** Buildings or trees should block the body (add their shapes to the same layer near the player).
+
+## 2026-11-06 — M6: controls, verbs and what the body does on its own
+**Decision.** P (or the HUD "Possess" button) possesses the selected NPC; the camera glides 0.7 s from the god rig to
+the possession rig and back. WASD relative to the camera, Shift sprint, mouse look (captured; a click recaptures),
+F first person, E talk to the nearest person within 3.5 m (sends `talk`, opens the dialogue panel with the possessed
+NPC as speaker) or work at a berry bush within 3.5 m / the own village's storehouse within 8 m (takes up to 4 food:
+year-120 villages live on farms and bushes are bare) / a building site within 8 m (`work`; T does the same when
+people stand around), G give food (`give:food`),
+R work alongside the person (`work` with their id), Space pause, Esc closes the dialogue or releases. God keys
+(Q/L/V, 1–5) do nothing while possessed. The verbs stay the contract's three; standing still, the body eats from what
+it carries when hungry (food < 0.2) and drinks at the shore when thirsty, so no `eat` verb was needed. Talking through
+the Mind uses a new `MindPool.AskAsPossessedAsync`: speaker `possessed` named after the body, and the line becomes a
+`SayIntention` from the possessed NPC to the listener (heard by both and bystanders) instead of a whisper from the god.
+Possession is never saved: the save writes "nobody" and a load releases.
+**Why.** The brief's controls; `AskAsync` hard-codes the god (speaker and whisper), so the possessed path needed a
+small additive Mind method (the Spotlight already excluded the possessed NPC, no change there).
+**Evidence.** `PossessionTests` (both projects), `PossessedDialogueTests`.
+**Revisit when.** More verbs (trade, court) or a radial menu.

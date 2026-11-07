@@ -36,6 +36,16 @@ public partial class GodCameraRig : Node3D
     /// <summary>Called by Main with the snapshot ground height under the focus point.</summary>
     public Func<float, float, float>? GroundHeight { get; set; }
 
+    /// <summary>M6: false while possessed: no pan, zoom or picking (the keys belong to the possessed body).</summary>
+    public bool InputEnabled { get; set; } = true;
+
+    /// <summary>M6: true while the rig follows the possessed NPC (see <see cref="Follow"/>).</summary>
+    public bool Following { get; private set; }
+
+    private Transform3D _followCamera;
+    private Transform3D _glideFrom;
+    private double _glideTime, _glideDuration;
+
     public override void _Ready()
     {
         _camera = GetNodeOrNull<Camera3D>("Camera3D");
@@ -78,8 +88,46 @@ public partial class GodCameraRig : Node3D
         Focus(new Vector2(Position.X, Position.Z) + direction.Normalized() * speed);
     }
 
+    /// <summary>
+    /// M6: while possessed the (non-current) god rig sits on the possessed NPC and its camera mirrors the possession
+    /// camera, so Main's LOD viewer and the Mind's focus follow the player without any change to Main. Call every frame.
+    /// </summary>
+    public void Follow(Vector3 focus, Transform3D cameraTransform)
+    {
+        Following = true;
+        _followCamera = cameraTransform;
+        Position = focus;
+        _groundY = focus.Y;
+        if (_camera is not null) _camera.GlobalTransform = cameraTransform;
+    }
+
+    /// <summary>M6: back to the normal god view (input stays as <see cref="InputEnabled"/> says).</summary>
+    public void StopFollow() => Following = false;
+
+    /// <summary>M6: the camera glides from <paramref name="from"/> (world transform) to its normal pose over <paramref name="seconds"/>.</summary>
+    public void GlideFrom(Transform3D from, double seconds)
+    {
+        _glideFrom = from;
+        _glideTime = 0;
+        _glideDuration = Math.Max(0.01, seconds);
+        ApplyCamera();
+    }
+
+    public bool Gliding => _glideTime < _glideDuration;
+
     public override void _Process(double delta)
     {
+        if (Following)
+        {
+            if (_camera is not null) _camera.GlobalTransform = _followCamera;
+            return;
+        }
+        if (_glideTime < _glideDuration) _glideTime += delta;
+        if (!InputEnabled)
+        {
+            ApplyCamera();
+            return;
+        }
         var dir = Vector2.Zero;
         bool typing = GetViewport()?.GuiGetFocusOwner() is LineEdit or TextEdit; // WASD in the dialogue box must not pan
         if (!typing)
@@ -118,6 +166,7 @@ public partial class GodCameraRig : Node3D
 
     public override void _UnhandledInput(InputEvent @event)
     {
+        if (!InputEnabled || Following) return;
         if (@event is not InputEventMouseButton { Pressed: true } mb) return;
         switch (mb.ButtonIndex)
         {
@@ -143,5 +192,10 @@ public partial class GodCameraRig : Node3D
         float pitch = Mathf.DegToRad(PitchDegrees);
         _camera.Position = new Vector3(0, MathF.Sin(pitch) * Zoom, MathF.Cos(pitch) * Zoom);
         _camera.Rotation = new Vector3(-pitch, 0, 0);
+        if (_glideTime < _glideDuration && _camera.IsInsideTree())
+        {
+            float t = Mathf.SmoothStep(0f, 1f, (float)(_glideTime / _glideDuration));
+            _camera.GlobalTransform = _glideFrom.InterpolateWith(_camera.GlobalTransform, t);
+        }
     }
 }

@@ -129,6 +129,9 @@ public partial class Main : Node
 
         SetupM7(s); // M7 UI pass: remaining god powers, overlay, settlement panel, Chronicle (Main.M7.cs)
 
+        // M6 possession: rig, controller, terrain collision and possession HUD live under this node (Possession/).
+        AddChild(new PossessionDirector { Name = "Possession" });
+
         GD.Print($"Eden boot ok: {(UseFakeSim ? "fake" : "real")} sim, seed {s.World.Seed}, world {s.World.Width}x{s.World.Height}, tick {s.Tick}, population {s.Population}");
     }
 

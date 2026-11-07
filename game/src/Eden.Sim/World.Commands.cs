@@ -260,58 +260,6 @@ public sealed partial class World
         OnGodAct(GodActKind.Whisper, Npcs.X[s], Npcs.Z[s], 0, s); // M7
     }
 
-    private void Possess(int npcId)
-    {
-        if (!Npcs.TryGetSlot(npcId, out int s)) { AddLog($"possess rejected: no npc {npcId}"); return; }
-        if (_possessed != Npcs.None) Release();
-        _possessed = npcId;
-        _possDirX = _possDirZ = 0;
-        Npcs.Phase[s] = ActionPhase.Done;
-    }
-
-    private void Release()
-    {
-        if (Npcs.TryGetSlot(_possessed, out int s))
-            Memories.Add(s, new Memory(Tick, MemoryKind.God, [MemoryStore.GodId, _possessed],
-                "I lost time; my body moved without me.", 6), Tick);
-        _possessed = Npcs.None;
-    }
-
-    private void MovePossessed(int s)
-    {
-        float len = MathF.Sqrt(_possDirX * _possDirX + _possDirZ * _possDirZ);
-        if (len < 0.01f) { Npcs.Phase[s] = ActionPhase.Done; return; }
-        float speed = Speed(s, StageOf(s)) * (_possSprint ? 1.8f : 1f) / Terrain.MoveCost[Terrain.CellIndex(Npcs.X[s], Npcs.Z[s])];
-        float nx = Npcs.X[s] + _possDirX / len * speed, nz = Npcs.Z[s] + _possDirZ / len * speed;
-        Npcs.Heading[s] = MathF.Atan2(_possDirX, _possDirZ);
-        if (!Terrain.IsWalkable(nx, nz)) return;
-        Npcs.X[s] = nx;
-        Npcs.Z[s] = nz;
-        Npcs.Phase[s] = ActionPhase.Moving;
-    }
-
-    private void PossessedInteract(int targetId, string verb)
-    {
-        if (!Npcs.TryGetSlot(_possessed, out int s)) { AddLog("interact rejected: nobody possessed"); return; }
-        if (verb == "work")
-        {
-            int node = Resources.FindNearest(ResourceKind.Berry, Npcs.X[s], Npcs.Z[s], 6f);
-            if (node < 0) return;
-            Npcs.TargetNode[s] = node;
-            Npcs.Action[s] = ActionKind.Gather;
-            Complete(s, StageOf(s));
-            return;
-        }
-        if (!Npcs.TryGetSlot(targetId, out int o) || Dist(Npcs.X[s], Npcs.Z[s], Npcs.X[o], Npcs.Z[o]) > InteractDistance * 2)
-        {
-            AddLog($"interact rejected: target {targetId} out of reach");
-            return;
-        }
-        if (verb == "talk") Converse(s, o);
-        else if (verb.StartsWith("give:", StringComparison.Ordinal)) GiveFood(s, o);
-        else AddLog($"interact rejected: unknown verb '{verb}'");
-    }
-
     private void GodAct(string text, int importance, float x, float z, float radius)
     {
         Events.Publish(new SimEvent(Tick, MemoryKind.God, text, importance, [MemoryStore.GodId],
