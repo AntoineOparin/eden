@@ -14,10 +14,10 @@ merge; keep the "Now" block at the top current. Numbers here are measured on Ant
   powers) and M6 possession, both on top of the art pass; then M8 scale (asset export, hitches,
   population ~2,000 by year 120). Worker deploy needs Antoine's go-ahead.
 - **Checks:** `./scripts/check.sh` = contracts (5 schemas, 19 fixtures, concepts.json 95 concepts),
-  218 Eden.Sim tests on the K1 branch (the M3 Slow society test now dominates, see K1), 23 Eden.Game gdUnit4 tests,
-  headless boot, 85 Worker tests.
-- **Known slow spot:** the Sim suite's two Slow tests take about a minute together. Split them
-  behind a `Category=Slow` filter if it starts to hurt.
+  251 Eden.Sim tests (~3.5 min; the Slow society test is capped at 150 years), 36 Eden.Game gdUnit4
+  tests, headless boot, 85 Worker tests.
+- **Known slow spot:** the three Slow Sim tests (population, society, pacing) take about 3 minutes
+  together; the full in-band pacing test runs only with `EDEN_PACE_FULL=1` (~40 min).
 - **Not deployed:** the Worker runs only through `wrangler dev` on localhost.
 
 ## 2026-11-06 — M0 (commit 9ab043a)
