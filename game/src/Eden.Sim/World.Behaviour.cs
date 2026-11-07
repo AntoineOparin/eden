@@ -74,6 +74,7 @@ public sealed partial class World
         Span<float> scores = stackalloc float[ActionScorer.ActionCount];
         ActionScorer.ScoreAll(in c, scores);
         ScoreKnowledge(s, stage, scores);
+        ScoreMyth(s, scores); // M7: shrines draw prayer
         var best = ActionScorer.Best(scores);
 
         var current = n.Action[s];
@@ -156,7 +157,7 @@ public sealed partial class World
                 break;
             }
             case ActionKind.Pray:
-                Act(s, 12);
+                if (!BeginPray(s)) Act(s, 12); // M7: walk to the shrine if there is one
                 break;
             case ActionKind.Teach or ActionKind.Learn or ActionKind.Craft or ActionKind.Invent:
                 BeginKnowledgeAction(s, action);
@@ -268,6 +269,7 @@ public sealed partial class World
         ActionKind.Trade => 4,
         ActionKind.Raid => 6,
         ActionKind.Settle => 2,
+        ActionKind.Pray => 12,
         _ => 1,
     };
 
@@ -377,6 +379,7 @@ public sealed partial class World
             case ActionKind.Pray:
                 n.NeedRef(s, Need.Purpose) = Math.Min(1f, n.Need(s, Need.Purpose) + 0.35f);
                 n.NeedRef(s, Need.Safety) = Math.Min(1f, n.Need(s, Need.Safety) + 0.1f);
+                CompletePray(s); // M7
                 break;
         }
     }
@@ -422,25 +425,17 @@ public sealed partial class World
 
     private void Gossip(int speaker, int listener)
     {
+        NoteContact(speaker, listener); // M7
         var mems = Memories.Of(speaker);
         if (mems.Count == 0) return;
         // Look at a few random memories; share the first important one the listener does not know.
+        // M7: gossip copies are retold too (myths travel), up to MaxGossipGeneration hops; World.Myth.cs distorts.
         for (int tries = 0; tries < 3; tries++)
         {
             var m = mems[Rng.NextInt(mems.Count)];
-            if (m.Importance < 6 || m.Kind == MemoryKind.Gossip || Memories.Contains(listener, m)) continue;
-            var subjects = m.Subjects;
-            int importance = m.Importance;
-            float roll = Rng.NextFloat();
-            if (roll < 0.15f && subjects.Length > 0)
-            {
-                // Subject swap: the story now names whoever told it.
-                subjects = (int[])subjects.Clone();
-                subjects[0] = Npcs.IdOf(speaker);
-            }
-            else if (roll < 0.35f) importance = Math.Clamp(importance + (Rng.Chance(0.5f) ? 1 : -1), 1, 10);
-            string text = $"{Npcs.Name[speaker]} told me: {m.Text}";
-            Memories.Add(listener, new Memory(Tick, MemoryKind.Gossip, subjects, text, importance), Tick);
+            if (m.Importance < 6 || Memories.Contains(listener, m)) continue;
+            if (m.Kind == MemoryKind.Gossip && !CanRetell(listener, m)) continue;
+            Retell(speaker, listener, m);
             return;
         }
     }

@@ -23,7 +23,17 @@ public interface IMindSnapshot
 
     /// <summary>Tick of the NPC's newest memory with importance ≥ 7 (lightning, deaths, the god...), or -1.</summary>
     long LastDramaTick(int npcId);
+
+    /// <summary>M7: how a living settlement stands with the god, or null (unknown settlement, or a snapshot without it).</summary>
+    GodStandingView? GodStanding(int settlementId) => null;
 }
+
+/// <summary>
+/// M7: the god's reputation in one settlement, for prompts. <paramref name="Stance"/> is "favourable", "fearful",
+/// "hostile" or "neutral"; the envied/feared names are the neighbour that feeling points at (null when faint).
+/// </summary>
+public readonly record struct GodStandingView(
+    float Favour, float Awe, float Envy, float Fear, string? EnviedSettlement, string? FearedSettlement, string Stance, string? Religion);
 
 /// <summary>Data behind <see cref="IMindSnapshot"/>, built once per snapshot on the sim thread.</summary>
 public sealed record MindExtras(
@@ -31,4 +41,10 @@ public sealed record MindExtras(
     IReadOnlyList<ChronicleEntry> RecentChronicle)
 {
     public static readonly MindExtras Empty = new(10, 24, [], [], [], []);
+
+    /// <summary>M7: god standing per settlement id (null entries for dead settlements).</summary>
+    public GodStandingView?[] GodStandings { get; init; } = [];
+
+    public GodStandingView? GodStandingOf(int settlementId)
+        => settlementId >= 0 && settlementId < GodStandings.Length ? GodStandings[settlementId] : null;
 }

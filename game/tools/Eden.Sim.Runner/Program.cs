@@ -8,6 +8,7 @@ using Eden.Sim.Contracts;
 //   dotnet run --project game/tools/Eden.Sim.Runner -- --bench 5000                 (ms per tick at N NPCs)
 //   dotnet run --project game/tools/Eden.Sim.Runner -- --seed 7 --years 200 --knowledge (concepts known anywhere per decade)
 
+if (Array.IndexOf(args, "--myth") >= 0) return MythReport.Run(args); // M7: --myth [--seed N] [--years Y] [--bless|--strike]
 int seed = 7, years = 60, tail = 15, bench = 0, traceDays = 0;
 bool knowledge = false;
 (int from, int to)? sweep = null;

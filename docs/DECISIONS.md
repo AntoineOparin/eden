@@ -211,3 +211,86 @@ with `UseBrain = false`. The main-scene test sets `UseBrain = false`.
 real calls from tests (AGENTS.md: no API calls from tests).
 **Evidence.** Headless boot prints `Eden mind: provider none`.
 **Revisit when.** Never for tests. A deployed URL changes only `BrainDefaults`.
+
+## 2026-11-06 — M7 myth: god standing numbers
+**Decision.** Per settlement `Favour` −1..1 and `Awe` 0..1. A blessing moves Favour 12 % of the way to +1
+(a curse toward −1) and adds 3 % Awe; lightning adds 15 % Awe and drought 10 %, and each adds 0.08 to a
+pending "wrath" that is subtracted from Favour (as a fraction of the gap to −1) 3 days after the first
+unforgiven harsh act, unless rain or a blessing comes first. Rain +6 % Favour; spawn/terraform +8 % Awe;
+gifts +4 % Favour; a whisper +5 % Awe in the listener's settlement. Daily decay ×0.995 Favour (half-life
+≈ 14 years, a generation) and ×0.99 Awe (≈ 7 years). Stance: favourable above +0.15, else fearful at
+Awe ≥ 0.35, else hostile below −0.15, else neutral. All in the `SimConfig` M7 block.
+**Why.** Ten daily blessings must land Favour > 0.5 (they give ≈ 0.71) and ten strikes must read as fear
+(Favour ≈ −0.57, Awe ≈ 0.74); the grace period is the spec's "unless followed by rain/bless within N days".
+**Evidence.** `MythTests` (10/10 seeds: Favour 0.71 after a year of blessings; lightning test −0.57/0.74).
+**Revisit when.** The god-powers UI lands and players can spam powers; then cap per-day gains.
+
+## 2026-11-06 — M7 myth: gossip distortion and god attribution
+**Decision.** One main-stream roll per retelling, as in M1: < 0.15 subject swap (the teller replaces the first
+subject, and the old name in the text), < 0.35 importance ±1 (never a no-op at 10), and < 0.35 + 0.3 × the
+teller's settlement Awe the god is credited for a death, raid, discovery or retold story that did not involve
+it (GodId prepended to the subjects, " The god willed it." / " The angry sky did this." appended). At most one
+distortion per hop. Gossip copies are now retold too (M1 never retold gossip), up to 6 hops, without nesting
+"X told me:" prefixes; `Memory.Generation` counts hops and `Memory.Distortion` records the last change. Both
+live in the `MYTH` save section, not `MEMS`, so the M1 section format is unchanged.
+**Why.** With Awe = 0 the attribution band has zero width, so a world where the god never acts draws exactly
+the same random numbers in gossip as before; probability rising with Awe is the brief's rule, and 0.3 at full
+Awe keeps most retellings faithful. Myths need more than one hop to form.
+**Evidence.** `GossipTests` (each distorted copy differs in exactly one way, Generation + 1; 0 attributions at
+Awe 0, more at Awe 1 than 2 × Awe 0.3). Seed 20, 80 years: 5,736 distorted retellings in the last decade.
+**Revisit when.** Memory streams fill with hearsay (cap 500 evicts it first, importance × age).
+
+## 2026-11-06 — M7 myth: beliefs and religions without the LLM
+**Decision.** Belief formation is a rule: daily, an adult with a god memory from the last 100 days and no god
+belief yet forms one (importance 6, tone from the stance) with chance 0.08 × (0.5 + piety) × min(1, Awe +
+|Favour|). "Holds a god belief" = has a belief memory whose text has a god word (the M5 list: god, voice, sky,
+heaven, divine, spirit, the one above), tracked per slot in `MemoryStore` and kept exact on eviction. A faction
+founds a religion when ≥ 40 % (and ≥ 3) of one settlement's adults hold one; if that settlement is in contact
+with a religious settlement it takes up that faith instead. Spread: 3 %/day per pair of settlements in contact
+into a faction without a faith. Schism: the capital's Favour opposes the faith's stance for `SchismYears` (14,
+the adult age) → a new faith with the current stance. An alliance keeps the absorbed faction's faith if the
+bigger one had none. Myth rolls (beliefs, spread, names) use their own seeded stream, saved in `MYTH`.
+**Why.** The acceptance test runs with the Mind off, so religion must emerge from witnessed god acts alone;
+concept beliefs ("The sky watches and judges.") count, per the brief. The separate stream keeps the main
+trajectory of god-free worlds unchanged until a religion actually appears.
+**Evidence.** 10/10 seeds found a favourable faith 5–16 days into the blessing year. Seed 20 with no god at
+all: a faith at year 17 from concept beliefs, 3 founded and 8 shrines by year 80; with a year of lightning: a
+schism at year 31 into "the Defiance of …" (hostile).
+**Revisit when.** Natural faiths look too early or too uniform once the knowledge pace pass lands (K1).
+
+## 2026-11-06 — M7 myth: contact, envy and fear
+**Decision.** Two settlements are in contact for 30 days after a talk between their members, a trader or
+raider on the road between them, or an NPC whose settlement changed since yesterday. In contact, each
+settlement looks at its most favoured neighbour: gap = their Favour − max(0, own Favour); Envy moves 15 %/day
+toward gap × (1 − their Awe), Fear toward gap × their Awe; otherwise both decay ×0.98. Envy adds
+0.02 × Envy grievance per day toward that neighbour.
+**Why.** The brief asks for neighbours to learn of favour "through trade contact and gossip"; envy feeding the
+M3 grievance lets favouritism cause raids without new conflict code.
+**Evidence.** `MythTests.A_neighbour_in_contact_envies_or_fears_the_blessed_settlement`: Envy 0.35, Fear 0.09.
+**Revisit when.** Envy-driven raids show up too often in sweeps with god powers on.
+
+## 2026-11-06 — M7 myth: files outside the brief's list
+**Decision.** Three tiny edits outside the M7 file list: `World.cs` `MindExtras()` sets
+`GodStandings = GodStandingViews()` (one line), `WorldSnapshot.cs` gains `GodStanding(int)` (one member), and
+`MindView.cs` gains `GodStandingView` + a default `IMindSnapshot.GodStanding` member; and a one-line fix in
+`World.Persistence.cs` `KnowledgeHash`: an empty knowledge dictionary now hashes like a missing one.
+**Why.** The Mind reads only the snapshot, and the snapshot is built in those files; nothing else carries
+settlement data to it. The hash fix: after Talk, a slot can hold an empty dictionary that a load leaves null,
+so save → load changed `StateHash` (found by `MythTests.Myth_state_survives_a_save_round_trip`). It is not
+myth-specific and touches no knowledge behaviour.
+**Evidence.** All 238 fast + 2 Slow Sim tests pass; the edits are away from A1's `Snapshot()` changes.
+**Revisit when.** Merging A1/K1: re-check those lines if git reports a conflict.
+
+## 2026-11-06 — M7 myth: shrines wait for an established village
+**Decision.** A religious settlement plans one shrine only with ≥ 20 members, a finished storehouse and
+hungry share ≤ 0.2 (`ShrineMinMembers`); the shrine site is then outside the regular site cap. Pray scores
+×1.6 within 60 m of one's own shrine, plus 0.1 × piety for believers of a religious faction; a prayer at the
+shrine adds 0.15 purpose and, in a religious faction, renews the god belief at most every 5 days.
+**Why.** The first version planned a shrine as soon as a 6-person village found a faith (natural faiths
+appear early, from concept beliefs). Sweeps showed those villages short of builders and stone: more hunger,
+more trades (which erase grievance) and raids pushed past year 90 on seeds 3, 5, 6. With the gate, a fixed
+70-year comparison (seeds 1, 3, 5, 6; all / no religion / no shrine) shows no systematic effect on raids:
+first raids land between years 60 and 70 or not at all in each variant.
+**Evidence.** Seed sweep 1..20 × 110 years: 17 of 18 surviving seeds raid (years 49–99); seed 1 does not.
+**Revisit when.** The M3 Slow test horizon (until 20 generations) makes a no-raid seed run very long; see
+backlog.

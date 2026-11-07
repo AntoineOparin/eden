@@ -15,6 +15,9 @@ public enum MemoryKind : byte
     Gossip,
 }
 
+/// <summary>How a retold (gossip) memory was changed on its last hop (M7 myth).</summary>
+public enum MemoryDistortion : byte { None, Subject, Importance, Attribution }
+
 /// <summary>One remembered event. Subjects are NPC ids (the god is <see cref="MemoryStore.GodId"/>).</summary>
 public sealed class Memory(long tick, MemoryKind kind, int[] subjects, string text, int importance)
 {
@@ -23,6 +26,12 @@ public sealed class Memory(long tick, MemoryKind kind, int[] subjects, string te
     public int[] Subjects { get; } = subjects;
     public string Text { get; } = text;
     public int Importance { get; } = importance;
+
+    /// <summary>M7: how many retellings this memory is from the event (0 = witnessed or felt first-hand).</summary>
+    public byte Generation { get; internal set; }
+
+    /// <summary>M7: what the last retelling changed (None for first-hand memories and faithful retellings).</summary>
+    public MemoryDistortion Distortion { get; internal set; }
 
     /// <summary>Set lazily by Eden.Mind for thinking NPCs; the sim only stores it.</summary>
     public float[]? Embedding { get; set; }
@@ -59,6 +68,11 @@ public sealed class MemoryStore
     /// Derived from the streams (rebuilt on load), so neither hashed nor saved. Read by Eden.Mind's spotlight.</summary>
     private long[] _drama = new long[64];
     public const int DramaImportance = 7;
+
+    /// <summary>M7, per slot: 1 + tick of the newest belief mentioning the god, and of the newest memory about the god
+    /// (a god act, or anything naming the god as a subject). Derived from the streams like <see cref="_drama"/> but kept
+    /// exact on eviction, because religion emergence reads them. Not saved; rebuilt on load.</summary>
+    private long[] _faith = new long[64], _godSeen = new long[64];
     private readonly int _cap;
     private readonly int _ticksPerDay;
 
@@ -76,6 +90,7 @@ public sealed class MemoryStore
         _streams[slot]?.Clear();
         Array.Clear(_evicted, slot * KindCount, KindCount);
         _drama[slot] = 0;
+        _faith[slot] = _godSeen[slot] = 0;
     }
 
     public void Add(int slot, Memory m, long now)
@@ -84,7 +99,33 @@ public sealed class MemoryStore
         var list = _streams[slot] ??= new List<Memory>(16);
         list.Add(m);
         if (m.Importance >= DramaImportance && m.Tick + 1 > _drama[slot]) _drama[slot] = m.Tick + 1;
+        NoteGod(slot, m);
         if (list.Count > _cap) Evict(slot, list, now);
+    }
+
+    /// <summary>Tick of the slot's newest belief that mentions the god (M7 "faithful"), or -1.</summary>
+    public long LastGodBeliefTick(int slot) => slot < _faith.Length ? _faith[slot] - 1 : -1;
+
+    /// <summary>Tick of the slot's newest memory about the god (seen, felt or heard), or -1.</summary>
+    public long LastGodMemoryTick(int slot) => slot < _godSeen.Length ? _godSeen[slot] - 1 : -1;
+
+    public static bool IsGodBelief(Memory m) => m.Kind == MemoryKind.Belief && GodStanding.MentionsGod(m.Text);
+
+    public static bool IsAboutGod(Memory m) => m.Kind == MemoryKind.God || Array.IndexOf(m.Subjects, GodId) >= 0;
+
+    private void NoteGod(int slot, Memory m)
+    {
+        if (IsGodBelief(m) && m.Tick + 1 > _faith[slot]) _faith[slot] = m.Tick + 1;
+        if (IsAboutGod(m) && m.Tick + 1 > _godSeen[slot]) _godSeen[slot] = m.Tick + 1;
+    }
+
+    /// <summary>True if the slot already remembers a story ending in <paramref name="core"/> (any teller, any retelling).</summary>
+    public bool ContainsStory(int slot, ReadOnlySpan<char> core)
+    {
+        if (slot >= _streams.Length || _streams[slot] is not { } list) return false;
+        foreach (var x in list)
+            if (x.Text.AsSpan().EndsWith(core, StringComparison.Ordinal)) return true;
+        return false;
     }
 
     /// <summary>Tick of the newest memory with importance ≥ 7 for this slot, or -1.</summary>
@@ -122,7 +163,13 @@ public sealed class MemoryStore
             if (score < worstScore) { worstScore = score; worst = i; }
         }
         _evicted[slot * KindCount + (int)list[worst].Kind]++;
+        var gone = list[worst];
         list.RemoveAt(worst);
+        if (IsGodBelief(gone) || IsAboutGod(gone))
+        {
+            _faith[slot] = _godSeen[slot] = 0;
+            foreach (var m in list) NoteGod(slot, m);
+        }
     }
 
     private void Ensure(int slot)
@@ -133,6 +180,8 @@ public sealed class MemoryStore
         Array.Resize(ref _streams, n);
         Array.Resize(ref _evicted, n * KindCount);
         Array.Resize(ref _drama, n);
+        Array.Resize(ref _faith, n);
+        Array.Resize(ref _godSeen, n);
     }
 
     public ulong Hash(ulong h, Npcs npcs)
@@ -183,6 +232,8 @@ public sealed class MemoryStore
         _streams = new List<Memory>?[Math.Max(64, npcs.Capacity)];
         _evicted = new int[_streams.Length * KindCount];
         _drama = new long[_streams.Length];
+        _faith = new long[_streams.Length];
+        _godSeen = new long[_streams.Length];
         for (int s = 0; s < npcs.HighWater; s++)
         {
             if (!npcs.Alive[s]) continue;
@@ -206,6 +257,7 @@ public sealed class MemoryStore
                 }
                 list.Add(m);
                 if (m.Importance >= DramaImportance && m.Tick + 1 > _drama[s]) _drama[s] = m.Tick + 1;
+                NoteGod(s, m);
             }
             for (int k = 0; k < KindCount; k++) _evicted[s * KindCount + k] = r.ReadInt32();
         }

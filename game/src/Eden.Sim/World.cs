@@ -198,7 +198,8 @@ public sealed partial class World
         }
         var drama = new long[Npcs.HighWater];
         for (int s = 0; s < drama.Length; s++) drama[s] = Npcs.Alive[s] ? Memories.LastDramaTick(s) : -1;
-        return new MindExtras(Config.TicksPerHour, Config.HoursPerDay, leaders.ToArray(), names, drama, ChronicleTail(32));
+        return new MindExtras(Config.TicksPerHour, Config.HoursPerDay, leaders.ToArray(), names, drama, ChronicleTail(32))
+            { GodStandings = GodStandingViews() };
     }
 
     private NpcPose PoseOf(int s) => Npcs.Phase[s] switch

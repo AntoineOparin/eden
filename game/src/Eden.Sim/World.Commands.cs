@@ -161,6 +161,7 @@ public sealed partial class World
             return;
         }
         GodAct($"The god made {what} appear out of nothing.", 8, c.X, c.Z, 0);
+        OnGodAct(GodActKind.Spawn, c.X, c.Z, 0); // M7
     }
 
     private void Lightning(float x, float z, float radius)
@@ -182,6 +183,7 @@ public sealed partial class World
         }
         string text = killed > 0 ? $"Lightning struck from a clear sky and killed {killed}." : "Lightning struck from a clear sky.";
         GodAct(text, 9, x, z, radius);
+        OnGodAct(GodActKind.Lightning, x, z, radius); // M7
     }
 
     private void SetWeather(string kind, int durationTicks)
@@ -197,6 +199,7 @@ public sealed partial class World
             _ => "The god cleared the skies.",
         };
         GodAct(text, 8, 0, 0, float.PositiveInfinity);
+        if (k != WeatherKind.Clear) OnGodAct(k == WeatherKind.Rain ? GodActKind.Rain : GodActKind.Drought, 0, 0, 0); // M7
     }
 
     private void Terraform(float x, float z, float radius, float delta)
@@ -222,6 +225,7 @@ public sealed partial class World
             Npcs.Phase[s] = ActionPhase.Done;
         }
         GodAct(delta > 0 ? "The god raised the land." : "The god sank the land.", 8, x, z, radius);
+        OnGodAct(GodActKind.Terraform, x, z, radius); // M7
     }
 
     private void Bless(int targetId, bool curse, int durationTicks)
@@ -233,6 +237,7 @@ public sealed partial class World
         string text = curse ? $"The god cursed {Npcs.Name[s]}." : $"The god blessed {Npcs.Name[s]}.";
         Events.Publish(new SimEvent(Tick, MemoryKind.God, text, 8, [MemoryStore.GodId, targetId],
             Npcs.X[s], Npcs.Z[s], Config.PerceptionRadius, curse ? "curse" : "blessing", 7));
+        OnGodAct(curse ? GodActKind.Curse : GodActKind.Bless, Npcs.X[s], Npcs.Z[s], 0, s); // M7
     }
 
     private void DropItem(string itemId, float x, float z, int count)
@@ -244,6 +249,7 @@ public sealed partial class World
         else if (itemId is "stone" or "rock") Resources.Add(ResourceKind.Stone, x, z, 5f * count);
         else { AddLog($"drop rejected: unknown item '{itemId}'"); return; }
         GodAct($"Gifts of {itemId} fell from the sky.", 8, x, z, 0);
+        OnGodAct(GodActKind.Gift, x, z, 0); // M7
     }
 
     private void Whisper(int npcId, string text)
@@ -251,6 +257,7 @@ public sealed partial class World
         if (!Npcs.TryGetSlot(npcId, out int s)) { AddLog($"whisper rejected: no npc {npcId}"); return; }
         string clean = Truncate(text, 280);
         Memories.Add(s, new Memory(Tick, MemoryKind.God, [MemoryStore.GodId, npcId], $"A voice from the sky said: \"{clean}\"", 9), Tick);
+        OnGodAct(GodActKind.Whisper, Npcs.X[s], Npcs.Z[s], 0, s); // M7
     }
 
     private void Possess(int npcId)
@@ -340,6 +347,7 @@ public sealed partial class World
             }
             case BeliefIntention b:
                 Memories.Add(s, new Memory(Tick, MemoryKind.Belief, [intention.NpcId], b.Text, b.Importance), Tick);
+                OnBeliefIntention(b.Text); // M7
                 break;
             case InventionIntention inv:
             {

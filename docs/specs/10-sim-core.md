@@ -86,6 +86,22 @@ transmission by proximity chatter (slow), teaching (fast, trust-gated), apprenti
 honing with diminishing returns; discovery roll per tick when all prerequisites ≥ 0.6,
 weighted by curiosity. Effects applied through `EffectApplier` using only the five primitives.
 
+**Myth (M7, as built 2026-11-06).** `World.Myth.cs`, `GodStanding.cs`, `Religion.cs`. Per settlement the god
+has `Favour` (−1..1) and `Awe` (0..1), moved by god actions through hooks in the command handlers
+(bless/curse ±0.12 of the gap, lightning/drought Awe + and a Favour loss that lands 3 days later unless rain
+or a blessing comes first, spawn/terraform/gift/whisper Awe +) and decaying daily (×0.995 / ×0.99). Two
+settlements are in contact for 30 days after a cross-settlement talk, a trade or raid trip, or someone moving
+between them; in contact, the less favoured side's `Envy` (gap × (1 − their Awe)) and `Fear` (gap × Awe) rise,
+and Envy adds grievance. Gossip during `Talk` copies a memory of importance ≥ 6 with one roll: < 0.15 subject
+swap (also in the text), < 0.35 importance ±1, < 0.35 + 0.3 × the teller's Awe a death, raid or discovery is
+credited to the god; gossip copies are retold up to 6 hops and carry `Memory.Generation` (hops) and
+`Memory.Distortion`. Adults who remember the god form a belief (rule-based, no LLM) with daily chance
+0.08 × (0.5 + piety) × min(1, Awe + |Favour|); when ≥ 40 % of a settlement's adults hold a belief that mentions
+the god (concept beliefs and Mind beliefs count), its faction founds a `Religion` (or takes up the faith of a
+settlement it is in contact with), unlocks a shrine and builds one once established (≥ 20 people, a storehouse, not hungry); Pray scores ×1.6 near one's shrine and renews the
+belief; faiths spread to factions in contact (3 %/day) and split when the capital's Favour opposes the stance
+for 14 years. Saved in the `MYTH` section, hashed. Myth rolls use their own seeded stream.
+
 **Chronicle and events.** `EventBus` (in-sim, synchronous) feeds the Chronicle list that the
 snapshot exposes as `NewChronicle`, the memory recorder, and the settlement logic.
 

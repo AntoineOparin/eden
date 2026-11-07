@@ -29,6 +29,7 @@ public sealed partial class World
         h = Hash.Mix(h, (ulong)TotalDeaths);
         h = Hash.Mix(h, (ulong)MaxLineage);
         h = SocietyHash(h);
+        h = MythHash(h);
         return h;
     }
 
@@ -40,7 +41,7 @@ public sealed partial class World
         h = Hash.Mix(h, sum);
         for (int s = 0; s < Npcs.HighWater; s++)
         {
-            if (!Npcs.Alive[s] || s >= _knowledge.Length || _knowledge[s] is not { } k) continue;
+            if (!Npcs.Alive[s] || s >= _knowledge.Length || _knowledge[s] is not { Count: > 0 } k) continue; // empty == null: a load leaves it null
             ulong ks = 0;
             foreach (var (id, p) in k) ks += Hash.Combine(StableHash.Of(id), BitConverter.SingleToUInt32Bits(p));
             h = Hash.Mix(h, (ulong)s);
@@ -81,6 +82,7 @@ public sealed partial class World
         });
         Section(w, "SOCI", WriteSociety);
         Section(w, "KNW2", WriteKnowledgeExtras);
+        Section(w, "MYTH", WriteMyth);
     }
 
     private static void Section(BinaryWriter w, string tag, Action<BinaryWriter> body)
@@ -141,6 +143,7 @@ public sealed partial class World
         if (sections.TryGetValue("SOCI", out var society)) { using var br = new BinaryReader(new MemoryStream(society)); ReadSociety(br); }
         else ReadSociety(null);
         EndKnowledgeLoad(sections.TryGetValue("KNW2", out var knw2) ? knw2 : null);
+        ReadMyth(sections.TryGetValue("MYTH", out var myth) ? myth : null);
 
         _grid = new SpatialGrid(Terrain.MaxX + Terrain.CellSize, Terrain.MaxZ + Terrain.CellSize, 32f);
         _grid.Rebuild(Npcs);

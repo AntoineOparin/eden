@@ -52,6 +52,8 @@ public sealed class WorldSnapshot(
     public string? SettlementName(int settlementId)
         => settlementId >= 0 && settlementId < _mind.SettlementNames.Length ? _mind.SettlementNames[settlementId] : null;
 
+    public GodStandingView? GodStanding(int settlementId) => _mind.GodStandingOf(settlementId);
+
     public long LastDramaTick(int npcId)
     {
         if (!IsAlive(npcId)) return -1;
