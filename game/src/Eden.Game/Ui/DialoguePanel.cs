@@ -78,6 +78,8 @@ public partial class DialoguePanel : PanelContainer
 
     public void ShowNpc(int npcId, string name)
     {
+        SpeakerId = -1; // M6: the god speaks unless ShowPossessed says otherwise
+        SpeakerName = "";
         if (npcId != NpcId) { Pending = null; LastError = null; }
         NpcId = npcId;
         NpcName = name;
@@ -91,7 +93,7 @@ public partial class DialoguePanel : PanelContainer
         text = text.Trim();
         if (Mind is null || NpcId < 0 || text.Length == 0 || Pending is { IsCompleted: false }) return false;
         LastError = null;
-        Pending = Mind.AskAsync(NpcId, text);
+        Pending = IsPossessedSpeaker ? Mind.AskAsPossessedAsync(NpcId, SpeakerId, SpeakerName, text) : Mind.AskAsync(NpcId, text);
         if (_input is not null) _input.Text = "";
         Render();
         return true;
@@ -116,14 +118,20 @@ public partial class DialoguePanel : PanelContainer
         if (Mind is not null && NpcId >= 0)
             foreach (var turn in Mind.History(NpcId))
             {
-                string who = turn.Speaker == Speaker.Npc ? NpcName : "You (the Voice)";
+                string who = turn.Speaker switch
+                {
+                    Speaker.Npc => NpcName,
+                    Speaker.Possessed => IsPossessedSpeaker ? $"You (as {SpeakerName})" : "You (possessing someone)",
+                    _ => "You (the Voice)",
+                };
                 string colour = turn.Speaker == Speaker.Npc ? "#e8d7a8" : "#9cc7ff";
                 _sb.Append($"[color={colour}][b]").Append(Escape(who)).Append("[/b][/color]  ").Append(Escape(turn.Text)).Append('\n');
                 plain.Append(who).Append(": ").Append(turn.Text).Append('\n');
             }
         Transcript = plain.ToString();
         if (_title is null) return; // not in a tree yet
-        _title.Text = NpcId >= 0 ? $"Speak to {NpcName}" : "Speak";
+        _title.Text = NpcId < 0 ? "Speak" : IsPossessedSpeaker ? $"{SpeakerName} talks to {NpcName}" : $"Speak to {NpcName}";
+        _input.PlaceholderText = IsPossessedSpeaker ? $"Speak as {SpeakerName}..." : "Speak as the god...";
         _log.Text = _sb.ToString();
         bool busy = Pending is { IsCompleted: false };
         _send.Disabled = Mind is null || busy;
@@ -135,4 +143,23 @@ public partial class DialoguePanel : PanelContainer
     }
 
     private static string Escape(string s) => s.Replace("[", "[lb]");
+
+    // ---- M6: the possessed NPC as speaker ---------------------------------------------------------
+
+    /// <summary>Who speaks: -1 for the god, else the possessed NPC's id (see <see cref="ShowPossessed"/>).</summary>
+    public int SpeakerId { get; private set; } = -1;
+    public string SpeakerName { get; private set; } = "";
+    public bool IsPossessedSpeaker => SpeakerId >= 0;
+
+    /// <summary>M6: opens the panel for <paramref name="npcId"/> with the possessed NPC speaking face to face.</summary>
+    public void ShowPossessed(int npcId, string name, int speakerId, string speakerName)
+    {
+        ShowNpc(npcId, name);
+        SpeakerId = speakerId;
+        SpeakerName = speakerName;
+        Render();
+    }
+
+    /// <summary>Puts the keyboard focus in the input line.</summary>
+    public void FocusInput() => _input?.CallDeferred(Control.MethodName.GrabFocus);
 }

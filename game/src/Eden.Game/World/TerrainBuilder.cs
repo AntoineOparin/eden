@@ -119,6 +119,18 @@ public partial class TerrainBuilder : Node3D
     }
 
     /// <summary>
+    /// M6: render height of grid point (<paramref name="x"/>, <paramref name="z"/>) (clamped to the grid), flattened like
+    /// the drawn terrain but not clamped to sea level, so the possessed body can wade. Used by <see cref="TerrainCollision"/>.
+    /// </summary>
+    public float RenderHeightAt(int x, int z)
+    {
+        if (_info is null || _render.Length == 0) return 0f;
+        x = Math.Clamp(x, 0, _info.Width - 1);
+        z = Math.Clamp(z, 0, _info.Height - 1);
+        return _render[z * _info.Width + x];
+    }
+
+    /// <summary>
     /// Flattens the render heights under <paramref name="foundations"/> (footprint to the foundation top, a one-cell
     /// apron half way), marks yards and settlement roads as dirt, and rebuilds the changed chunks. Render-side only.
     /// </summary>

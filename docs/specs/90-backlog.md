@@ -2,8 +2,8 @@
 
 Items that an earlier milestone left out on purpose, decided differently from the plan, or
 flagged as a question. Each line says where it belongs. Whoever executes that milestone owns the
-item; remove it from here in the same PR that resolves it. Last updated 2026-11-06 by M7
-(myth, sim side).
+item; remove it from here in the same PR that resolves it. Last updated 2026-11-06 by M6
+(possession).
 
 ## Eden.Sim (from M1, `10-sim-core.md`)
 
@@ -36,7 +36,9 @@ item; remove it from here in the same PR that resolves it. Last updated 2026-11-
 
 | Item | Belongs to | Note |
 |---|---|---|
-| No per-chunk `NavigationRegion3D` baking | M6 | Only the possessed `CharacterBody3D` needs navigation; the sim never does. |
+| Buildings, trees and other people do not block the possessed body | next possession pass | M6 resolved the nav-baking row without navigation: the sim decides where bodies walk and `TerrainCollision` adds a trimesh for the 3×3 chunks around the possessed body only (DECISIONS 2026-11-06). Add building/tree shapes on layer 10 near the player if walking through houses bothers. |
+| `FakeSimHost` ignores possession commands | keep unless needed | The director falls back to god view after 3 s ("The world did not let you in"); possession needs the real sim. |
+| More possessed verbs (trade, court, eat on demand) | when wanted | M6 kept the contract's talk/give/work; the body eats and drinks on its own when desperate. |
 | Settlement panel, Chronicle timeline, the other god powers (spawn, rain/drought, terraform, bless/curse, drop item) | M7 UI pass (after the A1 art pass merges) | M5 shipped the toolbar with Select / Lightning / Whisper, the brain settings panel, the budget meter and the dialogue panel. All other power commands already have sim handlers, and since M7 every one of them moves the god's standing (`World.Myth.cs`). The settlement panel should show Favour/Awe/stance, the faith, Envy/Fear and the neighbour they point at: needs a contract field (see Contracts). |
 | Religion overlay and Chronicle filters for the M7 kinds (`religion`, `schism`, `shrine`, `prayer`) | M7 UI pass (after A1) | Sim side is done: faiths per faction, shrines are `BuildingView` kind `shrine`, Chronicle entries exist. The overlay needs the faction → faith map (contract field below). |
 | `game/assets/` is `.gdignore`d and loaded at runtime | M8 (export) | A1 loads GLB/PNG/JPG/TTF with `GltfDocument`/`Image`/`FontFile` from `res://` files (DECISIONS 2026-11-06). An exported build must ship them as non-resource files (export filter `assets/*`) or move them to imported resources. |

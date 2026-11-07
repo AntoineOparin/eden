@@ -127,7 +127,10 @@ public partial class Main : Node
             CameraRig.GroundHeight = (_, _) => galleryY;
         }
 
-        GD.Print($"Eden boot ok: {(UseFakeSim ? "fake" : "real")} sim, seed {s.World.Seed}, world {s.World.Width}x{s.World.Height}, tick {s.Tick}, population {s.Population}");
+        // M6 possession: rig, controller, terrain collision and possession HUD live under this node (Possession/).
+        AddChild(new PossessionDirector { Name = "Possession" });
+
+        GD.Print($"Eden boot ok:{(UseFakeSim ? "fake" : "real")} sim, seed {s.World.Seed}, world {s.World.Width}x{s.World.Height}, tick {s.Tick}, population {s.Population}");
     }
 
     public override void _Process(double delta)

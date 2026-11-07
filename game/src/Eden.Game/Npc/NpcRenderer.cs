@@ -78,6 +78,8 @@ public partial class NpcRenderer : Node3D
     public int MidLodCount { get; private set; }
     public int FarLodCount { get; private set; }
     public int SelectedId { get; set; } = -1;
+    /// <summary>M6: the possessed NPC is drawn by its <see cref="PossessedController"/>, never here (any LOD). -1: none.</summary>
+    public int PossessedId { get; set; } = -1;
     public IReadOnlyCollection<int> HiLodNpcIds => _slotByNpc.Keys;
     public int RenderedCount { get; private set; }
     public bool AtlasReady => _atlas?.IsReady == true;
@@ -199,7 +201,7 @@ public partial class NpcRenderer : Node3D
             _pos[i] = p;
             _heading[i] = h;
             float d2 = p.DistanceSquaredTo(viewer);
-            _keys[i] = _slotByNpc.ContainsKey(v.Id) ? d2 * Hysteresis * Hysteresis : d2;
+            _keys[i] = v.Id == PossessedId ? float.MaxValue : _slotByNpc.ContainsKey(v.Id) ? d2 * Hysteresis * Hysteresis : d2;
             _order[i] = i;
             _lod[i] = 2; // far unless picked below
         }
@@ -210,7 +212,8 @@ public partial class NpcRenderer : Node3D
         if (km > 0 && km < n) SelectSmallest(_order, _keys, n, km);
         if (k > 0 && k < km) SelectSmallest(_order, _keys, km, k);
         _wantHi.Clear();
-        for (int j = 0; j < k; j++) _wantHi.Add(npcs[_order[j]].Id);
+        for (int j = 0; j < k; j++)
+            if (npcs[_order[j]].Id != PossessedId) _wantHi.Add(npcs[_order[j]].Id);
         for (int j = k; j < km; j++) _lod[_order[j]] = 1;
 
         for (int s = 0; s < _pool.Length; s++)
@@ -237,6 +240,7 @@ public partial class NpcRenderer : Node3D
         for (int i = 0; i < n; i++)
         {
             ref readonly var v = ref npcs[i];
+            if (v.Id == PossessedId) continue; // M6: drawn by the possession controller
             float scale = NpcScale * StageScale(v.Stage);
             float state = v.Pose == NpcPose.Dead ? 1f : v.IsThinking ? -1f : 0f;
             var palette = CharacterLibrary.PaletteParams(v.Id, v.SettlementId, state);
@@ -300,6 +304,7 @@ public partial class NpcRenderer : Node3D
         float bestD2 = maxPixels * maxPixels;
         for (int i = 0; i < n; i++)
         {
+            if (npcs[i].Id == PossessedId) continue;
             var world = _pos[i] + new Vector3(0, 0.85f * NpcScale * StageScale(npcs[i].Stage), 0);
             if (camera.IsPositionBehind(world)) continue;
             float d2 = camera.UnprojectPosition(world).DistanceSquaredTo(screenPosition);

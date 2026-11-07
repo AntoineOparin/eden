@@ -1,0 +1,29 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://src/Eden.Game/Cameras/PossessRig.cs" id="1_rig"]
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_arm"]
+radius = 0.25
+
+[node name="PossessRig" type="Node3D"]
+script = ExtResource("1_rig")
+
+[node name="Yaw" type="Node3D" parent="."]
+
+[node name="Pitch" type="Node3D" parent="Yaw"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.55, 0)
+
+[node name="SpringArm3D" type="SpringArm3D" parent="Yaw/Pitch"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.45, 0, 0)
+collision_mask = 512
+shape = SubResource("SphereShape3D_arm")
+spring_length = 4.2
+margin = 0.25
+
+[node name="End" type="Node3D" parent="Yaw/Pitch/SpringArm3D"]
+
+[node name="Camera3D" type="Camera3D" parent="."]
+top_level = true
+fov = 70.0
+near = 0.08
+far = 5000.0

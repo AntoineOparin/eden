@@ -71,7 +71,9 @@ public sealed class SimHost : ISimHost, IIntentionSink
         while (_running)
         {
             double now = sw.Elapsed.TotalSeconds;
-            accumulator += (now - last) * config.TicksPerRealSecond * _timeScale;
+            // M6: while someone is possessed the world runs at walking pace (PossessionTicksPerRealSecond at 1×).
+            int rate = _world.PossessedId != Npcs.None ? config.PossessionTicksPerRealSecond : config.TicksPerRealSecond;
+            accumulator += (now - last) * rate * _timeScale;
             last = now;
 
             DrainQueues();

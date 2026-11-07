@@ -38,6 +38,8 @@ public partial class NpcHi : Node3D
     private Color _params = new(-1, -1, -1, -1);
 
     public int NpcId { get; private set; } = -1;
+    /// <summary>M6: the possessed slot. The model keeps animating but is not drawn (first person).</summary>
+    public bool HideModel { get; set; }
     public CharacterModel? Model { get; private set; }
     public AnimationTree? AnimationTree => _active?.Tree;
     public string CurrentState => _active?.State ?? "";
@@ -54,7 +56,7 @@ public partial class NpcHi : Node3D
     {
         bool retarget = NpcId != view.Id;
         NpcId = view.Id;
-        Visible = true;
+        Visible = !HideModel;
         Position = position;
         Rotation = new Vector3(0, heading, 0);
         Scale = new Vector3(scale, scale, scale);

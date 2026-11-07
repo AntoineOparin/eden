@@ -9,13 +9,13 @@ merge; keep the "Now" block at the top current. Numbers here are measured on Ant
 - **Merged on main:** M0 tooling + contracts, M1 sim core, M2 render shell, brain Worker (M5-ready),
   M3 society, M4 knowledge, M5 minds, K1 knowledge balance, M7 myth (sim + Mind side), A1 art pass.
   See git log for the head.
-- **In flight:** nothing. K1, M7 (sim side) and A1 merged on 2026-11-06.
+- **In flight:** M6 possession on branch `m6-possession` (done, awaiting merge after the M7 UI pass); see the M6 section.
 - **Next per plan:** M7 UI pass (religion overlay, settlement panel, Chronicle filters, remaining god
   powers) and M6 possession, both on top of the art pass; then M8 scale (asset export, hitches,
   population ~2,000 by year 120). Worker deploy needs Antoine's go-ahead.
 - **Checks:** `./scripts/check.sh` = contracts (5 schemas, 19 fixtures, concepts.json 95 concepts),
   251 Eden.Sim tests (~3.5 min; the Slow society test is capped at 150 years), 36 Eden.Game gdUnit4
-  tests, headless boot, 85 Worker tests.
+  tests, headless boot, 85 Worker tests. On `m6-possession`: 265 Sim, 44 gdUnit4.
 - **Known slow spot:** the three Slow Sim tests (population, society, pacing) take about 3 minutes
   together; the full in-band pacing test runs only with `EDEN_PACE_FULL=1` (~40 min).
 - **Not deployed:** the Worker runs only through `wrangler dev` on localhost.
@@ -254,3 +254,77 @@ UI 0.37 MB). Triangles: character 723, Kenney trees 114–402 (before biome scal
 
 **Not done.** Herds (`game`) are not drawn; Nova Roma clouds, bridges and terrain-following roads; Quaternius
 characters (Drive quota). See `90-backlog.md`.
+
+## 2026-11-07 — M6 possession (branch m6-possession)
+
+**What.** Possession end to end. Game: `PossessionDirector` (one hook line in `Main`) with `PossessRig`
+(`SpringArm3D` third person, F first person, 0.7 s camera glide from and back to the god rig), `PossessedController`
+(`CharacterBody3D` + own `NpcHi`, prediction by command magnitude, sim authority), `TerrainCollision` (trimesh for the
+3×3 chunks around the body only), `PossessionHud` (name, needs, action, E/G/R/T prompt, controls, notices, god-view
+"Possess (P)" button, or M7's inspector button by reflection after the merge), `Hud.SetPossessed(bool)` (hides every god
+panel, including M7's `Hud.God`, and keeps the dialogue), `DialoguePanel.ShowPossessed` (speaker = the possessed NPC).
+Sim (additive): `World.Possession.cs` (talk = Converse + shared memory, give:food moves up to 2 food with
+affinity/trust/debt and a gift memory for both, work = join the target's gather/hunt/build/farm job for 24 ticks or the
+nearest berry bush, own storehouse or building site; neighbours who know the NPC remember "X stopped and stared…" /
+"…began walking oddly" on the first possessed tick and "X came back to themselves" on release; blackout memory kept;
+the body eats/drinks on its own when desperate), `SimHost` runs 2 ticks/s at 1× while someone is possessed, possession
+is not saved and a load releases it. Mind: `MindPool.AskAsPossessedAsync` (speaker `possessed`, the line becomes a
+`SayIntention` from the possessed NPC); the Spotlight already excluded the possessed NPC (tested). Dev flags:
+`--save-world`, `--load-world`, `--possess`, `--m6-check` (`PossessionCheck`). No contract change.
+
+**How verified.**
+
+- `./scripts/check.sh` green from the worktree root: contracts, 265 Eden.Sim tests (was 251), 44 Eden.Game gdUnit4
+  tests (was 36), headless boot clean, 85 Worker tests.
+- Eden.Sim.Tests: +14 (`PossessionTests` 13: needs tick, reactions once / strangers do not notice, walking oddly,
+  release without a tick, speed formula, talk, give, refusals, work alongside, bush + cancel, infants, save/load
+  releases, determinism; `Mind/PossessedDialogueTests` 1). Eden.Game.Tests (gdUnit4): +8 (`PossessionTests`: rig
+  axes/pitch/first person, collision chunks, renderer skips the possessed NPC, HUD hide/restore, dialogue speaker,
+  prompts, main-scene possess → walk → release with the sim catching up within 1 m, fake sim falls back).
+- Manual acceptance, scripted through the player's code paths (`--m6-check`, E/T/G/Esc and the dialogue panel), seed 20
+  year 120 saved once with `--year=120 --save-world` (fast-forward 101 s, population 1,442) and loaded with
+  `--load-world`; Mind on against `wrangler dev` (Workers AI, Gemma 4), background thinkers off for the run
+  (`--m6-thinkers=0`):
+
+  ```
+  [m6] year 121, population 1441, 12 villages; from Sunridge (271 people) to Marmere (132 people), 127 m apart
+  [m6] pressing Possess (P) on Eloira (#3145926)
+  [m6] no reachable berries; the home storehouse is 23 m away: take food there first
+  [m6] T: take food from the store at (395, 309)
+  [m6] route planned: 26 waypoints, 236 m
+  [m6] arrived at Marmere after 61 s; walking up to Kiris (#2097364)
+  You (as Eloira): Good day. I walked a long way to see your village. How is the harvest here?
+  Kiris: The sun has been kind, and our baskets grow heavy with grain. You have walked far, traveler; sit by our
+         fire and rest.
+  [m6] G: give food to Kiris
+  [m6] Esc: release
+  ```
+
+  Eloira's newest memories: `[6] god: I lost time; my body moved without me.` · `[5] gift: Eloira gave Kiris 2 food.` ·
+  `[7] fight: Raiders from Oakridge fell upon Marmere but were driven off.` (witnessed while there) ·
+  `[3] speech: Eloira said: "Good day. I walked a long way…"` · `[3] speech: Kiris said: "The sun has been kind…"` ·
+  `[4] conversation: Eloira came up and talked with Kiris.`
+  Kiris's newest memories: `[4] conversation: Eloira came back to themselves.` · `[5] gift: Eloira gave Kiris 2 food.` ·
+  both speech lines · `[6] belief: Eloira came from far away to ask about our harvest.` (from the Mind) ·
+  `[6] gossip: Eloira told me: Radon died of a fever.` · `[4] conversation: Eloira came up and talked with Kiris.`
+  A Sunridge neighbour (Ilak): `[5] conversation: Eloira stopped and stared, as if seeing everything for the first time.`
+- Screenshots: [third person](art/shots/possession-third-person.jpg), [first person](art/shots/possession-first-person.jpg),
+  [taking food](art/shots/possession-work.jpg), [dialogue](art/shots/possession-dialogue.jpg),
+  [after release, inspector](art/shots/possession-memories.jpg).
+
+**Numbers.** M4 Pro, 1600×900, `--disable-vsync --log-fps`.
+
+| Scenario | Budget | Measured |
+|---|---|---|
+| FakeSimHost 2,000 NPCs, god view (`--fake-sim --npcs=2000 --quit-after=14`) | ≥ 60 fps | 256 fps avg (min 242) |
+| Seed 20 year 120 (1,441 people), possessed, walking between villages, Mind on (final run) | ≥ 60 fps | 251 fps avg, min 224 (55 samples over 105 s); 99–654 draw calls |
+| Same, an earlier identical run | ≥ 60 fps | 117 fps avg, min 96 (the window was held at a 100 Hz cap for part of it) |
+
+Sim position vs body while sprinting: gap 0.3–1.9 m (one tick of lead), 0 authority corrections, ~45 move
+commands/s while moving, 27 collision chunk rebuilds for a 300 m walk. Neurons: 246.0 used today in total: 10.4 for the final
+run (1 `/chat` plus embeddings), 17.1 and 10.6 for two identical earlier runs (the dialogue screenshot was taken a
+frame too early, then the needs card covered the panel), and 208 for a first attempt that stalled on terrain with
+three background thinkers on (that is why thinkers are off in the check now).
+
+**Not done / notes.** The scripted check plans its own A* route over the heightmap (a player steers by eye). Buildings
+and trees do not block the body; possession needs the real sim (fake sim falls back). See backlog.

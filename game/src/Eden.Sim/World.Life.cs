@@ -70,7 +70,7 @@ public sealed partial class World
 
         UpdateKnowledge(s, stage);
 
-        if (_possessed != Npcs.None && n.IdOf(s) == _possessed) { MovePossessed(s); return; }
+        if (_possessed != Npcs.None && n.IdOf(s) == _possessed) { TickPossessed(s, stage); return; } // M6: World.Possession.cs
 
         if (n.Phase[s] == ActionPhase.Done || (Tick + s) % cfg.DecisionIntervalTicks == 0) Decide(s, stage, night);
         Execute(s, stage);

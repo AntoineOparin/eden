@@ -78,7 +78,7 @@ public sealed partial class World
         Section(w, "MISC", bw =>
         {
             bw.Write(Weather); bw.Write(WeatherUntil);
-            bw.Write(_possessed); bw.Write(_possDirX); bw.Write(_possDirZ); bw.Write(_possSprint);
+            bw.Write(Npcs.None); bw.Write(0f); bw.Write(0f); bw.Write(false); // M6: possession is not saved (release on load)
         });
         Section(w, "SOCI", WriteSociety);
         Section(w, "KNW2", WriteKnowledgeExtras);
@@ -138,7 +138,9 @@ public sealed partial class World
         using (var br = Open("MISC"))
         {
             Weather = br.ReadString(); WeatherUntil = br.ReadInt64();
-            _possessed = br.ReadInt32(); _possDirX = br.ReadSingle(); _possDirZ = br.ReadSingle(); _possSprint = br.ReadBoolean();
+            br.ReadInt32(); br.ReadSingle(); br.ReadSingle(); br.ReadBoolean(); // M6: older saves may name one; never restored
+            _possessed = Npcs.None;
+            ClearPossessionRuntime();
         }
         if (sections.TryGetValue("SOCI", out var society)) { using var br = new BinaryReader(new MemoryStream(society)); ReadSociety(br); }
         else ReadSociety(null);
