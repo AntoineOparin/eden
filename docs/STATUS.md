@@ -305,7 +305,7 @@ screenshot of the power effects; see the backlog rows added by this pass. M6 hoo
 (`SpringArm3D` third person, F first person, 0.7 s camera glide from and back to the god rig), `PossessedController`
 (`CharacterBody3D` + own `NpcHi`, prediction by command magnitude, sim authority), `TerrainCollision` (trimesh for the
 3×3 chunks around the body only), `PossessionHud` (name, needs, action, E/G/R/T prompt, controls, notices, god-view
-"Possess (P)" button, or M7's inspector button by reflection after the merge), `Hud.SetPossessed(bool)` (hides every god
+"Possess (P)" button in god view; after the merge it is bound to M7's inspector Possess button and the HUD button stays hidden), `Hud.SetPossessed(bool)` (hides every god
 panel, including M7's `Hud.God`, and keeps the dialogue), `DialoguePanel.ShowPossessed` (speaker = the possessed NPC).
 Sim (additive): `World.Possession.cs` (talk = Converse + shared memory, give:food moves up to 2 food with
 affinity/trust/debt and a gift memory for both, work = join the target's gather/hunt/build/farm job for 24 ticks or the

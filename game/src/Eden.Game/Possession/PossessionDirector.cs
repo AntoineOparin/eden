@@ -105,31 +105,15 @@ public partial class PossessionDirector : Node
     public bool UsesInspectorButton { get; private set; }
 
     /// <summary>
-    /// After the M7 merge the inspector exposes <c>PossessRequested</c> (Action&lt;int&gt;) and shows a Possess button once
-    /// someone subscribes. Bound by reflection so this branch compiles without it; the HUD button is the fallback.
+    /// The inspector shows its header "Possess" button once something subscribes to <see cref="NpcInspector.PossessRequested"/>;
+    /// while bound, the HUD's own "Possess (P)" button stays hidden.
     /// </summary>
     private void HookInspectorButton()
     {
         if (_main?.Hud?.Inspector is not { } inspector) return;
-        Action<int> handler = id => Possess(id);
-        var type = inspector.GetType();
-        const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance;
-        if (type.GetEvent("PossessRequested", flags) is { } ev && ev.EventHandlerType == typeof(Action<int>))
-        {
-            ev.AddEventHandler(inspector, handler);
-            UsesInspectorButton = true;
-        }
-        else if (type.GetField("PossessRequested", flags) is { } field && field.FieldType.IsAssignableFrom(typeof(Action<int>)))
-        {
-            field.SetValue(inspector, Delegate.Combine(field.GetValue(inspector) as Delegate, handler));
-            UsesInspectorButton = true;
-        }
-        else if (type.GetProperty("PossessRequested", flags) is { CanWrite: true } prop && prop.PropertyType.IsAssignableFrom(typeof(Action<int>)))
-        {
-            prop.SetValue(inspector, Delegate.Combine(prop.GetValue(inspector) as Delegate, handler));
-            UsesInspectorButton = true;
-        }
-        if (UsesInspectorButton) GD.Print("[m6] possession bound to the inspector's Possess button");
+        inspector.PossessRequested += id => Possess(id);
+        UsesInspectorButton = true;
+        GD.Print("[m6] possession bound to the inspector's Possess button");
     }
 
     // ---- possess / release ------------------------------------------------------------------

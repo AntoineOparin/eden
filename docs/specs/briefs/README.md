@@ -17,8 +17,8 @@ commit on a named branch, never merge or push; the coordinator merges after
 | `a1-art-pass.md` | A1 | tag phase3-base | a1-art-pass | merged 308e67a |
 | `k1-knowledge-balance.md` | K1 | tag phase3-base | k1-knowledge-balance | merged |
 | `m7-myth-sim.md` | M7 (sim+mind) | tag phase3-base | m7-myth-sim | merged 8a8fc27 |
-| `m7-ui-pass.md` | M7 (UI) | tag phase4-base | m7-ui-pass | in flight |
-| `m6-possession.md` | M6 | tag phase4-base | m6-possession | in flight |
+| `m7-ui-pass.md` | M7 (UI) | tag phase4-base | m7-ui-pass | merged 2026-11-07 (028b457) |
+| `m6-possession.md` | M6 | tag phase4-base | m6-possession | merged 2026-11-07 (63cd7f1) |
 
 ## Template
 

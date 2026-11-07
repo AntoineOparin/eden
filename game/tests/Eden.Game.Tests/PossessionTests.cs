@@ -158,7 +158,10 @@ public class PossessionTests
 
         main.Select(start.Id);
         await runner.SimulateFrames(20, 20); // the HUD refreshes five times a second
-        AssertThat(dir.PossessionHud.PossessButtonVisible).IsTrue();
+        // Since the M7 UI merge the inspector's header button drives possession and the HUD's own button stays hidden.
+        AssertThat(dir.UsesInspectorButton).IsTrue();
+        AssertThat(main.Hud!.Inspector!.PossessButtonVisible).IsTrue();
+        AssertThat(dir.PossessionHud.PossessButtonVisible).IsFalse();
         dir.PossessSelected();
         AssertThat(dir.IsPossessed).IsTrue();
         AssertThat(main.Hud!.IsPossessed).IsTrue();

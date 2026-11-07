@@ -40,6 +40,9 @@ public partial class NpcInspector : PanelContainer
 
     private Action<int>? _possess;
     private Button? _possessButton;
+
+    /// <summary>True while the header's Possess button is shown (something subscribed to <see cref="PossessRequested"/>).</summary>
+    public bool PossessButtonVisible => _possessButton?.Visible == true;
     private LinkButton _settlementLink = null!;
     private int _settlementId = -1;
     private GridContainer _knowledge = null!;
