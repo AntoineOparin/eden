@@ -65,6 +65,28 @@ public readonly record struct ResourceView(
     float Amount,
     byte Variant);
 
+/// <summary>How a settlement regards the god (M7). Byte values match the sim's own stance enum.</summary>
+public enum GodStance : byte { Neutral, Favourable, Fearful, Hostile }
+
+/// <summary>
+/// One living settlement with the god's standing there (M7 UI). <see cref="X"/>/<see cref="Z"/> is the centre in
+/// world metres. <see cref="FactionId"/> and <see cref="LeaderId"/> are -1 when there is none. <see cref="Favour"/> is
+/// −1..1, <see cref="Awe"/>, <see cref="Envy"/> and <see cref="Fear"/> 0..1; <see cref="EnviedId"/> /
+/// <see cref="FearedId"/> are the settlement that envy or fear points at, or -1 when the feeling is faint.
+/// <see cref="ReligionName"/> is the faith its faction follows, or null.
+/// </summary>
+public readonly record struct SettlementView(
+    int Id,
+    string Name,
+    float X, float Z,
+    int Members,
+    int FactionId,
+    int LeaderId,
+    float Favour, float Awe, float Envy, float Fear,
+    int EnviedId, int FearedId,
+    GodStance Stance,
+    string? ReligionName);
+
 /// <summary>
 /// Static world description; fixed for the lifetime of a world (terraforming updates the heightmap).
 /// Grid layout, shared by <see cref="IWorldSnapshot.Heights"/> and <see cref="IWorldSnapshot.Biomes"/>:
@@ -95,7 +117,11 @@ public sealed record NpcDetail(
 
 public readonly record struct RelationshipView(int OtherId, string OtherName, float Affinity, float Trust, float Debt);
 
-public readonly record struct MemoryView(long Tick, string Kind, string Text, int Importance);
+/// <summary>
+/// One memory. <see cref="Generation"/> (M7 UI) is 0 for a first-hand memory and n for a story heard through n
+/// retellings (gossip; each retelling may distort it). Defaulted so older constructors keep compiling.
+/// </summary>
+public readonly record struct MemoryView(long Tick, string Kind, string Text, int Importance, int Generation = 0);
 
 public sealed record ChronicleEntry(long Tick, string Kind, string Text, int Importance, IReadOnlyList<int> Subjects);
 
@@ -123,6 +149,9 @@ public interface IWorldSnapshot
 
     /// <summary>Resource nodes and farm-plot crops, for the renderer (A1). Order is stable between snapshots.</summary>
     ReadOnlyMemory<ResourceView> Resources { get; }
+
+    /// <summary>Living settlements with the god's standing (M7 UI), ordered by id. Rebuilt with every snapshot.</summary>
+    ReadOnlyMemory<SettlementView> Settlements { get; }
 
     /// <summary>Chronicle entries appended since the previous snapshot. Godot drains them each frame.</summary>
     IReadOnlyList<ChronicleEntry> NewChronicle { get; }

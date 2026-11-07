@@ -9,13 +9,12 @@ merge; keep the "Now" block at the top current. Numbers here are measured on Ant
 - **Merged on main:** M0 tooling + contracts, M1 sim core, M2 render shell, brain Worker (M5-ready),
   M3 society, M4 knowledge, M5 minds, K1 knowledge balance, M7 myth (sim + Mind side), A1 art pass.
   See git log for the head.
-- **In flight:** nothing. K1, M7 (sim side) and A1 merged on 2026-11-06.
-- **Next per plan:** M7 UI pass (religion overlay, settlement panel, Chronicle filters, remaining god
-  powers) and M6 possession, both on top of the art pass; then M8 scale (asset export, hitches,
+- **In flight:** M7 UI pass (branch m7-ui-pass, done, waiting to merge) and M6 possession.
+- **Next per plan:** merge M7 UI and M6; then M8 scale (asset export, hitches,
   population ~2,000 by year 120). Worker deploy needs Antoine's go-ahead.
 - **Checks:** `./scripts/check.sh` = contracts (5 schemas, 19 fixtures, concepts.json 95 concepts),
-  251 Eden.Sim tests (~3.5 min; the Slow society test is capped at 150 years), 36 Eden.Game gdUnit4
-  tests, headless boot, 85 Worker tests.
+  254 Eden.Sim tests (~3.5 min; the Slow society test is capped at 150 years), 45 Eden.Game gdUnit4
+  tests (after the M7 UI pass), headless boot, 85 Worker tests.
 - **Known slow spot:** the three Slow Sim tests (population, society, pacing) take about 3 minutes
   together; the full in-band pacing test runs only with `EDEN_PACE_FULL=1` (~40 min).
 - **Not deployed:** the Worker runs only through `wrangler dev` on localhost.
@@ -254,3 +253,48 @@ UI 0.37 MB). Triangles: character 723, Kenney trees 114–402 (before biome scal
 
 **Not done.** Herds (`game`) are not drawn; Nova Roma clouds, bridges and terrain-following roads; Quaternius
 characters (Drive quota). See `90-backlog.md`.
+## 2026-11-06 — M7 UI pass (branch m7-ui-pass)
+
+**What.** The UI half of M7 "myth and god" on the A1 theme. Contract (pre-approved): `SettlementView` + `GodStance` +
+`IWorldSnapshot.Settlements`, `MemoryView.Generation`, filled in `World.Snapshot()` / `TryBuildDetail` and by
+`FakeSimHost` (six fake settlements with a standing that god commands nudge, made-up Chronicle entries). Toolbar: spawn
+human / animals / plants, rain, drought, raise / lower land with a brush, bless, curse, drop food, each with a drawn icon,
+tooltip, hotkey and a local effect (`Fx/PowerFx.cs`). Settlement panel, Chronicle timeline (filters, importance,
+density strip, click to focus, 5,000-entry log), religion / god-standing / knowledge-spread overlay with legend
+(`Overlay/TerritoryOverlay.cs`), inspector settlement link, knowledge bars and myth marker. All new HUD parts sit under
+one `GodUi` node. Details: `40-game-client.md` "M7 UI as built"; DECISIONS 2026-11-06 "M7 UI: …".
+
+**How verified.**
+
+- `./scripts/check.sh` green. Eden.Sim tests 254 (was 251): +3 `SettlementViewTests` (views match the standing and
+  the Mind's view, no state-hash change, generation in details). Eden.Game gdUnit4 45 (was 36): +9 `MythUiTests`
+  (log bound and de-duplication, kind → filter mapping, merge with the real sim's tail, fake settlements and blessing,
+  knowledge sampling, palette, glyphs, and one scene test that drives every power, the Chronicle filters, focus
+  resolution, the settlement panel, the three overlay modes, the inspector and the one-switch hide).
+- Budget with the overlay on: `--fake-sim --npcs=2000 --log-fps --log-frame-time --quit-after=14 --ui=overlay:stance,
+  chronicle,settlement:0` at 1600×900: 199 fps average (the display now forces V-Sync at 200 Hz even with
+  `--disable-vsync`; overlay off: 200), scripts 1.3 ms and render CPU 0.3 ms per frame (~630 fps possible), draw calls
+  357 vs 226 with everything closed.
+- Manual M7 check with the Mind on, against `wrangler dev` on :8787 (Workers AI, Gemma 4 + bge-m3), seed 2:
+  `godot --path game -- --seed=2 --year=50 --hour=8 --m7-check --m7-after-days=2`. Calton (26 members) was blessed
+  once a day for a year (10 blessings over three of its people) through `Main.BlessNpc`; its nearest neighbour is
+  Marton (13 members, 76 m). Standing after the year: Calton favour +0.71, awe 0.25, stance favourable; Marton envy
+  0.35 and fear 0.09, both pointing at Calton (0.40 / 0.11 two days later). Then the same question to three people
+  through the dialogue panel: "What do you make of the god who watches over this island, and of your neighbours?"
+  - Nariek of Calton (blessed four times): "The Sky-God watches us with a kind eye, just as He has blessed me many
+    times. As for our neighbours, we trade and live as the Way of Boris teaches, though we keep our eyes sharp."
+  - Bedoelle of Calton (not blessed): "The Sky watches us, and we must live well so the judgment is kind. As for the
+    neighbors, they are just people like us, though some follow different ways like the Silaek."
+  - Ralon of Marton (neighbour): "The sky watches us all, judging if we walk the Way of Boris true. Our neighbors in
+    Calton seem to have the sky's eye upon them more than we, and it stirs a heavy feeling in my heart."
+  Cost: 228.85 Neurons (meter 588.96 → 817.78 of 9,000): 21 `/think`, 3 `/chat`, 24 `/embed`, all 200; one thought
+  timed out client-side after 20 s. No reflection landed in the short run (the 60 s real-time floor per NPC), so the
+  quotes are dialogue. Screenshot: [blessed settlement and the envious neighbour's reply](art/shots/ui-m7-check-blessed.jpg).
+- Screenshots: [faith overlay + Chronicle, seed 2 year 51](art/shots/ui-m7-faith-chronicle.jpg),
+  [knowledge-spread overlay (pottery)](art/shots/ui-m7-knowledge-overlay.jpg),
+  [fake sim: stance overlay, settlement panel, inspector, Chronicle](art/shots/ui-m7-fake-stance.jpg).
+
+**Not done.** Food stock in the settlement panel (not in the contract); knowledge per settlement is a sample; no
+screenshot of the power effects; see the backlog rows added by this pass. M6 hooks: `Hud.God` (one node to hide),
+`NpcInspector.PossessRequested` (shows a Possess button when subscribed).
+

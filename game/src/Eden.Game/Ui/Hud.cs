@@ -85,4 +85,8 @@ public partial class Hud : CanvasLayer
     }
 
     public void UpdateMind(MindStatus status) => BudgetMeter?.Render(status);
+
+    // ---- M7 UI pass: everything it added lives under the one "GodUi" node (myth bar, settlement panel, Chronicle).
+    // Hiding that node hides all of it (for possession). Built and driven by GodUi itself; Main wires it in Main.M7.cs.
+    public GodUi? God => GetNodeOrNull<GodUi>("GodUi");
 }

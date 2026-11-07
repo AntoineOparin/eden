@@ -70,6 +70,24 @@ and sends `LightningCommand`), mind bar (`BudgetMeter`, "Brain" button). `scenes
 falls back to `MindPool.CurrentThought`. `--m5-check` (`Dev/M5Check.cs`) scripts the M5 manual
 check through the same UI paths (`--m5-year`, `--m5-message`, `--m5-shot`, `--m5-timeout`).
 
+**M7 UI as built.** Toolbar (`GodPowers`): Select / Lightning / Whisper plus ten icon buttons with tooltips: spawn human
+(`SpawnCommand("human")`), animals (`animal:deer` ×3), plants (`plant:berry` ×3), rain / drought (`WeatherCommand`, 3 days),
+raise / lower land (`TerraformCommand` ±2.5 m with a 4–40 m brush slider and a ring preview under the cursor), bless /
+curse (`BlessCommand` on the person under the cursor or the nearest within 6 m, 2 days), drop food (`DropItemCommand`
+"food" ×3). Keys H N T R Y U J B K G. `Main.M7.cs` (partial of `Main`, one `SetupM7` call in `_Ready`) routes clicks
+and plays `Fx/PowerFx` effects. Everything else lives under the HUD's one `GodUi` node (myth bar: Chronicle, Settlements,
+overlay mode + legend + concept picker; keys C, O, M): `ChroniclePanel` (`scenes/ui/chronicle.tscn`: 12 kind filters,
+importance slider, per-year density strip, newest 800 rows of a 5,000-entry `ChronicleLog`, click focuses the camera on
+the subject or the named settlement), `SettlementPanel` (`scenes/ui/settlement.tscn`: picker, faction members, leader
+link, favour / awe bars, stance, envied / feared neighbour, faith, finished shrines, sampled knowledge with bars, recent
+entries naming it; no food stock, the contract has none). `Overlay/TerritoryOverlay` tints each settlement's land by
+god standing, faith or knowledge of a concept (off by default). Inspector: settlement link, knowledge as proficiency
+bars (strongest 16), `myth·n` marker on memories with `Generation` > 0, and a `PossessRequested` hook for M6. Dev flags:
+`--ui=chronicle,settlement[:id|town],overlay:stance|religion|knowledge[:concept],power:<name>,select:<id>`,
+`--m7-check` (`Dev/M7Check.cs`), `--log-frame-time` (`Dev/FrameTimeProbe.cs`, for when the display forces V-Sync).
+Panels refresh on timers (0.25–1 s), never per frame; while the sim is paused no new details arrive, so the leader name
+and knowledge sample wait for the next published snapshot.
+
 **Threading.** `Main._Process`: read `host.Latest` once, pass the same snapshot to every
 renderer and UI panel; never hold a snapshot across frames except for diffing.
 

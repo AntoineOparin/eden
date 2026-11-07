@@ -127,6 +127,8 @@ public partial class Main : Node
             CameraRig.GroundHeight = (_, _) => galleryY;
         }
 
+        SetupM7(s); // M7 UI pass: remaining god powers, overlay, settlement panel, Chronicle (Main.M7.cs)
+
         GD.Print($"Eden boot ok: {(UseFakeSim ? "fake" : "real")} sim, seed {s.World.Seed}, world {s.World.Width}x{s.World.Height}, tick {s.Tick}, population {s.Population}");
     }
 

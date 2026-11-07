@@ -1,0 +1,8 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/Eden.Game/Ui/SettlementPanel.cs" id="1_settlement"]
+
+[node name="Settlement" type="PanelContainer"]
+offset_right = 380.0
+offset_bottom = 400.0
+script = ExtResource("1_settlement")

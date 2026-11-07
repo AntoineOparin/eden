@@ -416,3 +416,41 @@ decor (grass, flowers, ferns) only within 150 m of the camera; mid NPC shadows o
 **Why.** A full cycle at 500× is a strobe; the budgets in spec 45.
 **Evidence.** STATUS A1 table.
 **Revisit when.** Time scales or the day length change in the sim.
+
+## 2026-11-06 — M7 UI: contract shape, GodStance name clash, Chronicle catch-up
+**Decision.** `SettlementView` and `IWorldSnapshot.Settlements` exactly as pre-approved, filled in `World.Snapshot()`
+from the same arrays as the Mind's `GodStandingViews()` (ids instead of names, -1 when absent or faint). The contract's
+`GodStance` enum shares its name and byte values with `Eden.Sim.GodStance`; Eden.Sim converts with a byte cast, and code
+outside `Eden.Sim` that imports both namespaces must qualify it (noted in `contracts/README.md`). `MemoryView.Generation`
+is an optional positional parameter (default 0) so existing constructors and tests compile unchanged. The client keeps
+its own Chronicle (`ChronicleLog`, ring buffer of 5,000) and, for the real sim, merges `IMindSnapshot.RecentChronicle`
+(last 32) with `NewChronicle`, de-duplicated by tick and text, because the sim can publish several snapshots between
+two frames and `NewChronicle` only covers the last one.
+**Why.** The brief fixed the field list and the enum name; renaming the sim's enum would have touched myth code this
+pass may not edit. Without the merge the timeline silently lost entries at 10× and faster.
+**Evidence.** `SettlementViewTests` (3), `MythUiTests.Chronicle_log_*`.
+**Revisit when.** A contract change is allowed: `NewChronicle` could carry everything since the previous *read*, and a
+`TerritoryRadius` field would let the overlay stop reading `SimConfig` defaults.
+
+## 2026-11-06 — M7 UI: settlement knowledge is sampled, not complete
+**Decision.** "What a settlement knows" (settlement panel, knowledge-spread overlay) is estimated from a sample of
+up to 8 adults (the leader first) whose `NpcDetail.Knowledge` the client requests one settlement at a time, cached per
+in-game day with a 6 s real-time floor. The panel says how many were asked.
+**Why.** Details exist only for the sim's bounded watch list (32), shared with the inspector and the Mind's spotlight;
+asking for every member would evict them. No contract field carries per-settlement knowledge.
+**Evidence.** `MythUiTests.Settlement_knowledge_samples_members_and_caches_per_day`; seed 2 year 51 shows "57 concepts
+known among 8 of 11 adults asked".
+**Revisit when.** The sim exposes per-settlement knowledge (a contract row in the backlog).
+
+## 2026-11-06 — M7 UI: drawn power icons, overlay as draped discs, local effects only
+**Decision.** The ten new toolbar icons (person, paw, sprout, rain, drought, raise, lower, star, skull, basket) and
+three panel icons (scroll, house, map) are drawn in code like the A1 bolt (`UiTheme.M7Glyphs`), not Kenney PNGs. The
+overlay is one polar-grid disc per settlement draped on the render terrain (radius `SettlementRadius × TerritoryFactor`
+= 64 m), one shared unshaded material with a per-instance tint, rebuilt only when centres or the terrain change. Power
+effects are CPU particles, a ripple ring shader, a light and (for weather, which is island-wide) a short screen tint.
+Hotkeys are letters (H N T R Y U J B K G for powers, C / O / M for the panels) because 1–5 are the time controls.
+**Why.** kenney.nl refused the download from this machine (403, bot check) and no further asset was needed; decals
+would also tint buildings and NPCs; the brief asks for cheap local visuals.
+**Evidence.** `MythUiTests.Toolbar_glyphs_are_drawn_for_every_m7_icon`; 2,000 fake NPCs with overlay, Chronicle and
+settlement panel open: 199 fps average (display-capped at 200), scripts 1.3 ms per frame.
+**Revisit when.** Someone fetches the Kenney packs by hand and prefers them, or the overlay needs real territory shapes.

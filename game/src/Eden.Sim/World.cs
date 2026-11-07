@@ -181,7 +181,34 @@ public sealed partial class World
             Tick, clock.Year, clock.DayOfYear, clock.HourOfDay,
             new WorldInfo(Config.Seed, Config.WorldWidth, Config.WorldHeight, Config.CellSize, Config.SeaLevel, Config.ChunkSize),
             _publishedHeights ??= (float[])Terrain.Heights.Clone(), _publishedBiomes ??= (byte[])Terrain.Biomes.Clone(),
-            views, BuildingViews(), chronicle, details, versions, _detailRequests, MindExtras(), ResourceViews());
+            views, BuildingViews(), chronicle, details, versions, _detailRequests, MindExtras(), ResourceViews(), SettlementViews());
+    }
+
+    /// <summary>
+    /// Living settlements with the god's standing for the M7 UI (contract <see cref="SettlementView"/>). Read-only:
+    /// the same numbers as <see cref="GodStandingViews"/>, with ids instead of names. Not on the tick path.
+    /// </summary>
+    private SettlementView[] SettlementViews()
+    {
+        var st = Settlements;
+        var g = Standing;
+        g.Ensure(st.Count);
+        int alive = 0;
+        for (int k = 0; k < st.Count; k++) if (st.Alive[k]) alive++;
+        var views = new SettlementView[alive];
+        int i = 0;
+        for (int k = 0; k < st.Count; k++)
+        {
+            if (!st.Alive[k]) continue;
+            int r = ReligionOfSettlement(k);
+            int envied = st.IsAlive(g.EnvyOf[k]) && g.Envy[k] > 0.05f ? g.EnvyOf[k] : -1;
+            int feared = st.IsAlive(g.FearOf[k]) && g.Fear[k] > 0.05f ? g.FearOf[k] : -1;
+            views[i++] = new SettlementView(k, st.Name[k], st.CenterX[k], st.CenterZ[k], st.Members[k],
+                Factions.IsAlive(st.Faction[k]) ? st.Faction[k] : -1, Npcs.IsAlive(st.Leader[k]) ? st.Leader[k] : -1,
+                g.Favour[k], g.Awe[k], g.Envy[k], g.Fear[k], envied, feared,
+                (Contracts.GodStance)(byte)g.StanceOf(k, Config), r >= 0 ? Religions.Name[r] : null);
+        }
+        return views;
     }
 
     /// <summary>
@@ -269,7 +296,7 @@ public sealed partial class World
         rels.Sort((a, b) => b.Affinity.CompareTo(a.Affinity));
         var mems = new List<MemoryView>();
         if (Memories.Summary(s) is { } summary) mems.Add(new MemoryView(0, "summary", summary, 1));
-        foreach (var m in Memories.Of(s)) mems.Add(new MemoryView(m.Tick, Memory.KindName(m.Kind), m.Text, m.Importance));
+        foreach (var m in Memories.Of(s)) mems.Add(new MemoryView(m.Tick, Memory.KindName(m.Kind), m.Text, m.Importance, m.Generation));
         string goal = Npcs.Action[s].ToString().ToLowerInvariant();
         if (Npcs.TargetNpc[s] != Npcs.None && Npcs.IsAlive(Npcs.TargetNpc[s])) goal += " " + NameOf(Npcs.TargetNpc[s]);
         detail = new NpcDetail(id, Npcs.Name[s], (int)AgeYears(s), needs, traits, knowledge, rels, mems, goal, null);
