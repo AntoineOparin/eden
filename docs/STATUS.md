@@ -9,7 +9,8 @@ merge; keep the "Now" block at the top current. Numbers here are measured on Ant
 - **Merged on main:** M0 tooling + contracts, M1 sim core, M2 render shell, brain Worker (M5-ready),
   M3 society, M4 knowledge, M5 minds, K1 knowledge balance, M7 myth (sim + Mind side), A1 art pass, M7 UI pass, M6 possession.
   See git log for the head.
-- **In flight:** nothing. M7 UI pass and M6 possession merged into main on 2026-11-07 (merge order: M7 UI, then M6).
+- **In flight (phase 5, launched 2026-11-07 from tag phase5-base):** M8 scale (branch m8-scale), A2 art follow-ups
+  (a2-art-followups), C1 contract pass for settlements and the Chronicle (c1-contract-pass). Merge order: C1, M8, A2.
 - **Next per plan:** M8 scale (asset export, hitches, population ~2,000 by year 120); art follow-ups
   (clouds, animals, bridges, less chibi characters); knowledge roadmap items 4–6. Worker deploy needs Antoine's go-ahead.
 - **Checks:** `./scripts/check.sh` = contracts (5 schemas, 19 fixtures, concepts.json 95 concepts),
